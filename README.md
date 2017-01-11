@@ -8,7 +8,7 @@
 
 *Unstable - under development - do not use it yet*
 
-DireApe is be an environment for making distributed reactive apps in JavaScript. It delivers:
+DireApe is an JavaScript library for making distributed reactive apps. It delivers:
 
 - message passing between processes
 - a reactive world state
