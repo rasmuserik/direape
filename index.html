@@ -30,7 +30,9 @@ reun.run(`
  xhr.open('GET', './README.md'); xhr.send();
     `,location.href);
     </script>
-    <script>reun.require('./main.js');</script>
+    <script>reun.require('./main.js').then(module => {
+       module.main && module.main()
+    });</script>
     <script>document.write('<script src="//incoming.solsort.com/log.js?' + location.protocol + '//' + location.host + location.pathname + location.search + '"></s' + 'cript>');</script>
   </body>
 </html>

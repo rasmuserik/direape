@@ -5,21 +5,19 @@ var direape = exports;
 //
 // Should probably be replaced with better general module
 //
-function randomString() {
-  return Math.random().toString(32).slice(2);
-}
-function nextTick(f) {
-  setTimeout(f, 0);
-}
-function slice(a, start, end) {
-  return Array.prototype.slice.call(a, start, end);
-}
+
+var randomString = () => Math.random().toString(32).slice(2);
+var nextTick = f => setTimeout(f, 0);
+var slice = (a, start, end) => Array.prototype.slice.call(a, start, end);
 function warn() {
   console.log.apply(console, ['warn'].concat(slice(arguments)));
 }
 
 // # Internal methods
 var pid = "PID" + randomString();
+var msg = function(pid, mbox) {
+  return {dst: `${mbox}@${pid}`, data: slice(arguments, 2)};
+}
 var state = new immutable.Map();
 var prevState = state;
 var handlers = {};
@@ -96,7 +94,7 @@ function spawn() {
       (self.URL || self.webkitURL).createObjectURL(new Blob([`
           importScripts('https://unpkg.com/reun');
           reun.require('direape').then(da => {
-            self.postMessage(da.exports.pid);
+            self.postMessage(da.pid);
           });
           `], {type:'application/javascript'}));
   }
@@ -127,6 +125,7 @@ direape.getIn = (ks, defaultValue) => state.getIn(ks, defaultValue);
 direape.reaction = (name, f) => { reactions[name] = f; }
 direape.spawn = spawn;
 direape.kill = kill;
+direape.msg = msg;
 
 // # Built-in event handlers
 direape.handle('reun.run', (state, code, uri) => {
@@ -149,3 +148,16 @@ direape.reaction('direape.subscriptions', function() {
     direape.dispatch({dst: v[1], data:[direape.getIn(v[0])]});
   }
 });
+
+direape.main = () => {
+  var child;
+  var da = direape;
+  spawn().then(child => {
+    console.log(child);
+    da.dispatch(msg(child, 'reun.run', 
+          'console.log("hallo" + require("direape").pid);', "" + location.href));
+    da.dispatch(msg(direape.pid, 'reun.run', 
+          'console.log("hallo" + require("direape").pid);', "" + location.href));
+  });
+  console.log('main');
+}
