@@ -56,3 +56,9 @@ It is possible to add reactive functions to the state, such that they are called
     - `dst` `pid:ns:type`
     - `src` `pid[:"callback":calback-id]`
     - `data` [...]
+## License
+
+This software is copyrighted solsort.com ApS, and available under GPLv3, as well as proprietary license upon request.
+
+Versions older than 10 years also fall into the public domain.
+
