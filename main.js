@@ -128,22 +128,22 @@ direape.kill = kill;
 direape.msg = msg;
 
 // # Built-in event handlers
-direape.handle('reun.run', (state, code, uri) => {
+direape.handle('reun:run', (state, code, uri) => {
   require('reun').run(code, uri);
 });
-direape.handle('direape.getIn', (state, ks, mbox) => {
+direape.handle('direape:getIn', (state, ks, mbox) => {
   direape.dispatch({dst: mbox, data: [direape.getIn(ks)]});
 });
-direape.handle('direape.setIn', (state, ks, value) => state.setIn(ks,value)); 
+direape.handle('direape:setIn', (state, ks, value) => state.setIn(ks,value)); 
 
 var subscriptions = new Set();
-direape.handle('direape.subscribe', function(state, path, dst) {
+direape.handle('direape:subscribe', function(state, path, dst) {
   subscriptions.add([path, dst]);
 });
-direape.handle('direape.unsubscribe', function(state, path, dst) {
+direape.handle('direape:unsubscribe', function(state, path, dst) {
   subscriptions.delete([path, dst]);
 });
-direape.reaction('direape.subscriptions', function() {
+direape.reaction('direape:subscriptions', function() {
   for(var v of subscriptions) {
     direape.dispatch({dst: v[1], data:[direape.getIn(v[0])]});
   }
@@ -154,9 +154,9 @@ direape.main = () => {
   var da = direape;
   spawn().then(child => {
     console.log(child);
-    da.dispatch(msg(child, 'reun.run', 
+    da.dispatch(msg(child, 'reun:run', 
           'console.log("hallo" + require("direape").pid);', "" + location.href));
-    da.dispatch(msg(direape.pid, 'reun.run', 
+    da.dispatch(msg(direape.pid, 'reun:run', 
           'console.log("hallo" + require("direape").pid);', "" + location.href));
   });
   console.log('main');
