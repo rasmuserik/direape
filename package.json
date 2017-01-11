@@ -1,0 +1,18 @@
+{
+  "name": "direape",
+  "version": "0.0.1",
+  "description": "Distributed Reactive App Environment",
+  "main": "main.js",
+  "scripts": { "test": "true" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/solsort/direape"
+  },
+  "keywords": [],
+  "author": "RasmusErik / solsort.com",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/solsort/direape/issues"
+  },
+  "homepage": "http://direape.solsort.com"
+}
