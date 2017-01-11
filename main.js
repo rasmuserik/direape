@@ -19,8 +19,8 @@ function warn() {
 }
 
 // # Internal methods
-var pid = "PID" + randomString() + randomString() + randomString();
-var state = new immutable.Map().set(pid, new immutable.Map());
+var pid = "PID" + randomString();
+var state = new immutable.Map();
 var prevState = state;
 var handlers = {};
 var messageQueue = [];
@@ -41,8 +41,8 @@ self.onmessage = o => {
   _dispatch(o.data);
 }
 function _dispatch(o) {
-   messageQueue.push(o);
-   _dispatchAll(); 
+  messageQueue.push(o);
+  _dispatchAll(); 
 };
 function _dispatchSync(o) {
   //console.log(pid.slice(0,7), o);
@@ -62,7 +62,7 @@ function _dispatchAll() {
     messageQueue = [];
     for(var i = 0; i < messages.length; ++i) {
       try {
-      _dispatchSync(messages[i])
+        _dispatchSync(messages[i])
       } catch(e) {
         warn('error during dispatch:', e);
       }
@@ -73,15 +73,48 @@ function _dispatchAll() {
       for(var k in reactions) {
         try {
           reactions[k]();
-      } catch(e) {
-        warn('error during reaction:', e);
-      }
+        } catch(e) {
+          warn('error during reaction:', e);
+        }
       }
       prevState = state;
     } else {
       //console.log('reaction unneeded');  
     }
   });
+}
+
+// # Add worker
+
+var baseUrl = self.location ? self.location.href : './';
+var workerSourceUrl;
+var workers = {};
+function spawn() {
+  return new Promise((resolve, reject) => {
+  if(!workerSourceUrl) {
+    workerSourceUrl = 
+      (self.URL || self.webkitURL).createObjectURL(new Blob([`
+          importScripts('https://unpkg.com/reun');
+          reun.require('direape').then(da => {
+            self.postMessage(da.exports.pid);
+          });
+          `], {type:'application/javascript'}));
+  }
+  var worker = new Worker(workerSourceUrl);
+  worker.onmessage = o => {
+    var pid = o.data;
+    worker.onmessage = o => _dispatch(o.data);
+    workers[pid] = worker;
+    transports[pid] = o => worker.postMessage(o);
+    resolve(pid);
+  }
+  });
+}
+
+function kill(pid) {
+  workers[pid].terminate();
+  delete workers[pid];
+  delete transports[pid];
 }
 
 // # API
@@ -92,6 +125,8 @@ direape.dispatch = _dispatch;
 direape.dispatchSync = (o) => { _dispatchSync(o); _dispatchAll(); };
 direape.getIn = (ks, defaultValue) => state.getIn(ks, defaultValue);
 direape.reaction = (name, f) => { reactions[name] = f; }
+direape.spawn = spawn;
+direape.kill = kill;
 
 // # Built-in event handlers
 direape.handle('reun.run', (state, code, uri) => {
@@ -114,8 +149,3 @@ direape.reaction('direape.subscriptions', function() {
     direape.dispatch({dst: v[1], data:[direape.getIn(v[0])]});
   }
 });
-
-try {
-  postMessage({dst: 'direape.workerReady', data: [pid]});
-} catch(e) {
-}
