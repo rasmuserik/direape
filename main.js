@@ -38,9 +38,9 @@ transports[pid] = o => {
 transports['*'] = o => self.postMessage(o);
 self.onmessage = o => {
   //console.log('onmessage', o)
-  _dispatchAsync(o.data);
+  _dispatch(o.data);
 }
-function _dispatchAsync(o) {
+function _dispatch(o) {
    messageQueue.push(o);
    _dispatchAll(); 
 };
@@ -88,8 +88,7 @@ function _dispatchAll() {
 direape.pid = pid;
 direape._transports = transports;
 direape.handle = (eventType, f) => { handlers[eventType] = f; }
-direape.call = dst => _dispatchAsync({dst: dst, data: slice(arguments, 1)}); 
-direape.dispatchAsync = _dispatchAsync;
+direape.dispatch = _dispatch;
 direape.dispatchSync = (o) => { _dispatchSync(o); _dispatchAll(); };
 direape.getIn = (ks, defaultValue) => state.getIn(ks, defaultValue);
 direape.reaction = (name, f) => { reactions[name] = f; }
@@ -99,7 +98,7 @@ direape.handle('reun.run', (state, code, uri) => {
   require('reun').run(code, uri);
 });
 direape.handle('direape.getIn', (state, ks, mbox) => {
-  direape.dispatchAsync({dst: mbox, data: [direape.getIn(ks)]});
+  direape.dispatch({dst: mbox, data: [direape.getIn(ks)]});
 });
 direape.handle('direape.setIn', (state, ks, value) => state.setIn(ks,value)); 
 
@@ -112,7 +111,7 @@ direape.handle('direape.unsubscribe', function(state, path, dst) {
 });
 direape.reaction('direape.subscriptions', function() {
   for(var v of subscriptions) {
-    direape.dispatchAsync({dst: v[1], data:[direape.getIn(v[0])]});
+    direape.dispatch({dst: v[1], data:[direape.getIn(v[0])]});
   }
 });
 
@@ -120,4 +119,3 @@ try {
   postMessage({dst: 'direape.workerReady', data: [pid]});
 } catch(e) {
 }
-
