@@ -39,44 +39,236 @@ In the process of being redesigned/implemented, not done yet.
 
 ## Process / messages
 
-- [ ] `da.pid` is the unique id of the current process
-- [ ] `da.parent` the pid of the parent process, and is assigned when created as a child process.
-- [ ] `da.call(pid, name, ...parameters) => promise` executes a named handle in a process
-- [ ] `da.run(pid, name, ...parameters)` executes a named handle in process, and discards the result.
+- [x] `da.pid` is the unique id of the current process
+- [x] `da.parent` the pid of the parent process, and is assigned when created as a child process.
+- [x] `da.call(pid, name, ...parameters) => promise` executes a named handle in a process
+- [x] `da.run(pid, name, ...parameters)` executes a named handle in process, and discards the result.
 
 ## Defining handlers/reactions
 
-- [ ] `da.handle("name", (...parameters) => promise)` adds a new event handler. When `name` is run/called, the function is executed, the new state replaces the old state, and the return/reject of the promise is returned.
-- [ ] `da.reaction(name, () => promise)` - adds a reactive handle, that is executed when the `name` is emitted, or the accessed parts of the state has changed.
+- [x] `da.handle("name", (...parameters) => promise)` adds a new event handler. When `name` is run/called, the function is executed, the new state replaces the old state, and the return/reject of the promise is returned.
+- [x] `da.reaction(name, () => promise)` - adds a reactive handle, that is executed when the `name` is emitted, or the accessed parts of the state has changed.
 
 ## Accessing the application state
 
-- [ ] `da.setJs([...keys], value)` sets a value, - only allowed to be called synchronously within a handler/reaction, to avoid race-conditions
-- [ ] `da.getJs([...keys], defaultVale) => value`
+- [x] `da.setJs([...keys], value)` sets a value, - only allowed to be called synchronously within a handler/reaction, to avoid race-conditions
+- [x] `da.getJs([...keys], defaultVale) => value`
 
 Immutable value is publicly available yet, to avoid to expose immutable data structure implementation. TODO: maybe extend the api to make immutable value available. For example like `da.getIn([...keys], defaultVale) => Immutable`
 
 ## Creating / killing children
 
-- [ ] `da.children()` list of live child processes
-- [ ] `da.spawn(code) => promise` spawn a new process, execute the passed javascript, and return its pid as a promise
-- [ ] `da.kill(pid)` kill a child process
+- [x] `da.children()` list of live child processes
+- [x] `da.spawn(code) => promise` spawn a new process, execute the passed javascript, and return its pid as a promise
+- [x] `da.kill(pid)` kill a child process
 
-## Handle
+## Handlers
 
-- [ ] `da:getIn(path) -> value` 
+- [x] `reun:run(src, base) ` 
+- [x] `da:getIn(path) -> value` 
+- [x] `da:setIn(path, value)` 
 - [ ] `da:subscribe(path, handlerName)` - call `da.run(da.pid, handlerName, path, value)` on changes
 - [ ] `da:unsubscribe(path, handlerName)`
 
-# Features backlog
+# API implementation
 
-- [ ] Implement API above
-- [ ] Description/implementation of event execution
+    var immutable = require('immutable');
+    var state = new immutable.Map();
+    var prevState = state;
+    var da = exports;
+    var handlers = {};
+    var reactions = {};
+    
+## Process / messages
+    
+    da.pid = 'PID' + randomString();
+    /* TODO: emit pid to parent */
+    
+    self.onmessage = o => {
+      da.parent = o.data;
+      self.onmessage = o => send(o.data);
+    }
+    
+    da.run = function(pid, name) {
+      var params = slice(arguments, 2);
+      send({dstPid: pid, dstName: name, params: params});
+    }
+    
+    da.call = function(pid, name) {
+      var params = slice(arguments, 2);
+      return new Promise((resolve, reject) => {
+        send({dstPid: pid, dstName: name, 
+          srcPid: da.pid,
+          srcName: callbackHandler((val, err) => err ? reject(err) : resolve(val)),
+          params: params})});
+    }
+    
+    
+    function callbackHandler(f) {
+      var id = 'callback:' + randomString();
+      handlers[id] = function() {
+        delete handlers[id];
+        return f.apply(null, slice(arguments));
+      }
+      return id;
+    }
+    
+## Handlers/reactions
 
+    da.handle = (name, f) => {
+      handlers[name] = f;
+    };
+    
+    function makeReaction(name, f) {
+      reactions[name] = true;
+      var reaction = function() {
+        if(handlers[name] !== reaction) {
+          delete reactions[name];
+        } else {
+          return f();
+        }
+      }
+      return reaction;
+    }
+    da.reaction = (name, f) => {
+      handlers[name] = makeReaction(name, f);
+      return Promise.resolve(handlers[name]());
+    }
+    
+## Accessing the application state
+    
+    function setJs(o, path, value) {
+      /* TODO: check that we are in handler, or else throw */
+      if(path.length) {
+        var key = path[0];
+        var rest = path.slice(1);
+        if(!o) {
+          if(typeof key === 'number') {
+            o = new immutable.List();
+          } else {
+            o = new immutable.Map();
+          }
+        }
+        return o.set(key, setJs(o.get(path[0]), path.slice(1), value));
+      } else {
+        return immutable.fromJS(value);
+      }
+    }
+    da.setJs = (path, value) => { 
+      state = setJs(state, path, value); 
+      reschedule();
+    };
+    
+    da.getJs = (path, defaultValue) => {
+      var result = state.getIn(path);
+      return result === undefined ? defaultValue :
+        (result.toJS ? result.toJS() : result);
+    };
+    
+## Creating / killing children
+    
+    var baseUrl = self.location ? self.location.href : './';
+    var workerSourceUrl;
+    var children = {};
+    da.spawn = () => new Promise((resolve, reject) => {
+      /* TODO: execute src */
+      if(!workerSourceUrl) {
+        workerSourceUrl = 
+          (self.URL || self.webkitURL).createObjectURL(new Blob([
+              "importScripts('https://unpkg.com/reun');" +
+              "reun.require('http://localhost:8080/main.js').then(da => {" +
+              " self.postMessage(da.pid);" +
+              "});"
+              ], {type:'application/javascript'}));
+      }
+      var child = new Worker(workerSourceUrl);
+      child.onmessage = o => {
+        var pid = o.data;
+        children[pid] = child;
+        child.postMessage(da.pid);
+        child.onmessage = o => send(o.data);
+        resolve(pid);
+      }
+    });
+    
+    da.kill = (pid) => {
+      children[pid].terminate();
+      delete children[pid];
+    };
+    
+    da.children = () => Object.keys(children);
+    
+    
+## Handlers
+
+    da.handle('reun:run', (a,b) => reun.run(a,b).then(o=>{}));
+    /*TODO: make reun:run result serialisable*/
+    da.handle('da:setIn', da.setJs);
+    da.handle('da:getIn', da.getJs);
+    
+# Event loop
+
+    var messageQueue = [];
+    var scheduled = false;
+    
+    function reschedule() {
+      if(!scheduled) {
+        nextTick(handleMessages);
+        scheduled = true;
+      }
+    }
+    function send(msg) {
+      if(msg.dstPid === da.pid) {
+        messageQueue.push(msg);
+        reschedule();
+      } else if(children[msg.dstPid]) {
+        console.log('a');
+        children[msg.dstPid].postMessage(msg);
+      } else {
+        console.log('b', msg, da.pid, children);
+        self.postMessage(msg);
+        console.log('c');
+      }
+    }
+    
+    function sendResponse(msg, params) {
+      if(msg.srcPid) {
+        send({dstPid: msg.srcPid, dstName: msg.srcName, params: params});
+      }
+    }
+    function handleMessages() {
+      scheduled = false;
+      if(messageQueue.length) {
+        var messages = messageQueue;
+        messageQueue = [];
+        messages.forEach(msg => {
+          try {
+            Promise.resolve(handlers[msg.dstName].apply(null, msg.params))
+              .then(o => sendResponse(msg, [o]), 
+                  e => sendResponse(msg, [null, errorToJson(e)]));
+          } catch(e) {
+            sendResponse(msg, [null, errorToJson(e)]);
+          }
+        });
+      }
+      if(!prevState.equals(state)) {
+        /* TODO: only run reactions where used parts of state had been changed */
+        Object.keys(reactions).forEach(name => send({dstPid: da.pid, dstName: name}));
+        prevState = state;
+      }
+    }
+    
 # Utility functions
     
+## Generic
+    function errorToJson(e) {
+      /* TODO: better json representation of error, including stack trace*/
+      return {error: e};
+    }
     function randomString() {
-      return Math.random().toString(32).slice(2);
+      return Math.random().toString(32).slice(2) +
+        Math.random().toString(32).slice(2) +
+        Math.random().toString(32).slice(2);
     }
     function nextTick(f) {
       setTimeout(f, 0);
@@ -85,161 +277,40 @@ Immutable value is publicly available yet, to avoid to expose immutable data str
       return Array.prototype.slice.call(a, start, end);
     }
     
+# Main / test
+    da.main = () => {
+      console.log('running', da.pid);
     
-# Literate code
-
-Should probably be replaced with better general module
-
-    var direape = exports;
+      da.reaction('blah', () => {
+        console.log('blah', da.getJs(['blah']));
+      });
     
-# Internal methods
-    var pid = "PID" + randomString();
-    var msg = function(pid, mbox) {
-      return {dst: `${mbox}@${pid}`, data: slice(arguments, 2)};
-    }
-    var state = new immutable.Map();
-    var prevState = state;
-    var handlers = {};
-    var messageQueue = [];
-    var scheduled = false;
-    var reactions = {};
-    var transports = {};
-    transports[pid] = o => {
-      var mbox = o.dst.slice(0, o.dst.lastIndexOf('@'));
-      if(handlers[mbox]) {
-        state = handlers[mbox].apply(o, [state].concat(o.data)) || state;
-      } else {
-        console.log('missing handler for ', pid.length, o, mbox);
-      }
-    }
-    transports['*'] = o => self.postMessage(o);
-    self.onmessage = o => {
-console.log('onmessage', o)
-      _dispatch(o.data);
-    }
-    function _dispatch(o) {
-      messageQueue.push(o);
-      _dispatchAll(); 
+      da.setJs(['blah', 1, 'world'], "hi");
+      console.log('here', da.getJs(['blah']));
+    
+      da.handle('hello', (t) => {
+       da.setJs(['blah'], '123');
+        console.log('hello', t);
+       return 'hello' + t;
+      });
+      da.run(da.pid, 'hello', 'world');
+      da.call(da.pid, 'hello', 'to you').then(o => console.log(o));
+      da.call(da.pid, 'hello', 'to me').then(o => console.log(o));
+      da.setJs(['hi'], 'thread-1');
+      da.spawn().then(child =>
+          da.call(child, 'reun:run', 'require("./main.js").setJs(["hi"], "here");', 'http://localhost:8080/')
+          .then(() => 
+            da.call(child, 'da:getIn', ['hi'], 123).then(o =>
+            console.log('call-result', o))
+          )
+          .then(() => 
+            da.call(da.pid, 'da:getIn', ['hi'], 432).then(o =>
+            console.log('call-result', o))
+          )
+      );
+      console.log(Object.keys(da));
     };
-    function _dispatchSync(o) {
-console.log(pid.slice(0,7), o);
-      o.dst = (o.dst || '').includes('@') ? o.dst : o.dst + '@' + pid;
-      var f = transports[o.dst.slice(o.dst.lastIndexOf('@') + 1)];
-      (f || transports['*'])(o);
-    }
     
-    function _dispatchAll() {
-      if(scheduled) {
-        return;
-      }
-      scheduled = true;
-      nextTick(function() {
-        scheduled = false;
-        var messages = messageQueue;
-        messageQueue = [];
-        for(var i = 0; i < messages.length; ++i) {
-          try {
-            _dispatchSync(messages[i])
-          } catch(e) {
-            console.log('error during dispatch:', e);
-          }
-        }
-    
-        if(!prevState.equals(state)) {
-console.log('reaction needed');  
-          for(var k in reactions) {
-            try {
-              reactions[k]();
-            } catch(e) {
-              console.log('error during reaction:', e);
-            }
-          }
-          prevState = state;
-        } else {
-console.log('reaction unneeded');  
-        }
-      });
-    }
-    
-# Add worker
-    
-    var baseUrl = self.location ? self.location.href : './';
-    var workerSourceUrl;
-    var workers = {};
-    function spawn() {
-      return new Promise((resolve, reject) => {
-      if(!workerSourceUrl) {
-        workerSourceUrl = 
-          (self.URL || self.webkitURL).createObjectURL(new Blob([`
-              importScripts('https://unpkg.com/reun');
-              reun.require('direape').then(da => {
-                self.postMessage(da.pid);
-              });
-              `], {type:'application/javascript'}));
-      }
-      var worker = new Worker(workerSourceUrl);
-      worker.onmessage = o => {
-        var pid = o.data;
-        worker.onmessage = o => _dispatch(o.data);
-        workers[pid] = worker;
-        transports[pid] = o => worker.postMessage(o);
-        resolve(pid);
-      }
-      });
-    }
-    
-    function kill(pid) {
-      workers[pid].terminate();
-      delete workers[pid];
-      delete transports[pid];
-    }
-    
-# API
-    direape.pid = pid;
-    direape._transports = transports;
-    direape.handle = (eventType, f) => { handlers[eventType] = f; }
-    direape.dispatch = _dispatch;
-    direape.dispatchSync = (o) => { _dispatchSync(o); _dispatchAll(); };
-    direape.getIn = (ks, defaultValue) => state.getIn(ks, defaultValue);
-    direape.reaction = (name, f) => { reactions[name] = f; }
-    direape.spawn = spawn;
-    direape.kill = kill;
-    direape.msg = msg;
-    
-# Built-in event handlers
-    direape.handle('reun:run', (state, code, uri) => {
-      require('reun').run(code, uri);
-    });
-    direape.handle('direape:getIn', (state, ks, mbox) => {
-      direape.dispatch({dst: mbox, data: [direape.getIn(ks)]});
-    });
-    direape.handle('direape:setIn', (state, ks, value) => state.setIn(ks,value)); 
-    
-    var subscriptions = new Set();
-    direape.handle('direape:subscribe', function(state, path, dst) {
-      subscriptions.add([path, dst]);
-    });
-    direape.handle('direape:unsubscribe', function(state, path, dst) {
-      subscriptions.delete([path, dst]);
-    });
-    direape.reaction('direape:subscriptions', function() {
-      for(var v of subscriptions) {
-        direape.dispatch({dst: v[1], data:[direape.getIn(v[0])]});
-      }
-    });
-    
-    direape.main = () => {
-      var child;
-      var da = direape;
-      spawn().then(child => {
-        console.log(child);
-        da.dispatch(msg(child, 'reun:run', 
-              'console.log("hallo" + require("direape").pid);', "" + location.href));
-        da.dispatch(msg(direape.pid, 'reun:run', 
-              'console.log("hallo" + require("direape").pid);', "" + location.href));
-      });
-      console.log('main');
-    }
 # License
 
 This software is copyrighted solsort.com ApS, and available under GPLv3, as well as proprietary license upon request.
