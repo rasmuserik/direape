@@ -1,4 +1,4 @@
-// <img src=https://direape.solsort.com/icon.png width=128 height=128 align=right>
+// <img src=https://direape.solsort.com/icon.png width=96 height=96 align=right>
 //
 // [![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/) 
 // [![github](https://img.shields.io/badge/github-solsort/direape-blue.svg)](https://github.com/solsort/direape)
