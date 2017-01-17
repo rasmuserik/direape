@@ -52,7 +52,7 @@ TODO: consider refactoring `handlers` to be a Map instead of an Object, - as we 
     da.reaction = (name, f) => {
       handlers[name] = makeReaction(name, f);
       return Promise.resolve(handlers[name]());
-    }
+    };
     
 
 The reactions object is used to keep track of which of the handlers that are reactions. 
@@ -70,7 +70,7 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
         } else {
           return f();
         }
-      }
+      };
       return reaction;
     }
     
@@ -85,26 +85,27 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
     self.onmessage = o => {
       da.parent = o.data;
       self.onmessage = o => send(o.data);
-    }
+    };
     
 `da.run(pid, name, ...parameters)` executes a named handle in a process, and discards the result.
     
-    da.run = function(pid, name) {
+    da.run = (pid, name) => {
       var params = slice(arguments, 2);
       send({dstPid: pid, dstName: name, params: params});
-    }
+    };
     
 `da.call(pid, name, ...parameters) => promise` executes a named handle in a process, and returns the result as a promise. This is done by registring a temporary callback handler.
     
-    da.call = function(pid, name) {
+    da.call = (pid, name) => {
       var params = slice(arguments, 2);
       return new Promise((resolve, reject) => {
         send({dstPid: pid, dstName: name, 
           srcPid: da.pid,
           srcName: callbackHandler((val, err) => 
               err ? reject(err) : resolve(val)),
-          params: params})});
-    }
+          params: params});
+      });
+    };
     
 ## Accessing the application state
 
@@ -172,12 +173,12 @@ When the new worker is created, we send back and forth the pids, so the parent/c
     da.spawn = () => new Promise((resolve, reject) => {
       /* TODO use https://unpkg.com/direape/worker.js instead */
       var workerSourceUrl = 
-          (self.URL || self.webkitURL).createObjectURL(new Blob([
+        (self.URL || self.webkitURL).createObjectURL(new Blob([
               "importScripts('https://unpkg.com/reun');" +
               "reun.require('direape@0.1').then(da => {" +
               " self.postMessage(da.pid);" +
               "});"
-              ], {type:'application/javascript'}));
+        ], {type:'application/javascript'}));
       var child = new Worker(workerSourceUrl);
       child.onmessage = o => {
         var pid = o.data;
@@ -185,7 +186,7 @@ When the new worker is created, we send back and forth the pids, so the parent/c
         child.postMessage(da.pid);
         child.onmessage = o => send(o.data);
         resolve(pid);
-      }
+      };
     });
     
 `da.kill(pid)` kill a child process
@@ -210,7 +211,7 @@ setIn/getIn
 TODO: make `reun:run` result serialisable, currently we just discard it
     
     da.handle('reun:run', (src,baseUrl) => 
-        reun.run(src,baseUrl).then(o => jsonify(o)));
+        require('reun').run(src,baseUrl).then(o => jsonify(o)));
     
 TODO:
 
@@ -226,7 +227,7 @@ TODO more documentation in the rest of this file
       handlers[id] = function() {
         delete handlers[id];
         return f.apply(null, slice(arguments));
-      }
+      };
       return id;
     }
     
@@ -250,7 +251,7 @@ TODO more documentation in the rest of this file
         children[msg.dstPid].postMessage(msg);
       } else {
         try {
-        self.postMessage(msg);
+          self.postMessage(msg);
         } catch(e) {
           console.log('send error', msg, e);
         }
@@ -281,14 +282,14 @@ TODO more documentation in the rest of this file
       }
     }
     function handleMessage(msg) {
-          try {
-            Promise
-              .resolve(handlers[msg.dstName].apply(null, msg.params))
-              .then(o => sendResponse(msg, [o]), 
-                  e => sendResponse(msg, [null, jsonify(e)]));
-          } catch(e) {
-            sendResponse(msg, [null, jsonify(e)]);
-          }
+      try {
+        Promise
+          .resolve(handlers[msg.dstName].apply(null, msg.params))
+          .then(o => sendResponse(msg, [o]), 
+              e => sendResponse(msg, [null, jsonify(e)]));
+      } catch(e) {
+        sendResponse(msg, [null, jsonify(e)]);
+      }
     }
     
     
@@ -311,7 +312,7 @@ TODO more documentation in the rest of this file
          * and apply is probably slow.
          * Also handle Actual typed arrays,
          * in if above. */
-        result.base64 = self.btoa(String.fromCharCode.apply(null, new Uint8Array(o)))
+        result.base64 = self.btoa(String.fromCharCode.apply(null, new Uint8Array(o)));
       }
       if(o.stack) result.stack = o.stack;
       if(o.name) result.name = o.name;
@@ -344,13 +345,13 @@ TODO: replace this with proper testing
         console.log('blah', da.getJS(['blah']));
       });
     
-      da.setJS(['blah', 1, 'world'], "hi");
+      da.setJS(['blah', 1, 'world'], 'hi');
       console.log('here', da.getJS(['blah']));
     
       da.handle('hello', (t) => {
-       da.setJS(['blah'], '123');
+        da.setJS(['blah'], '123');
         console.log('hello', t);
-       return 'hello' + t;
+        return 'hello' + t;
       });
       da.run(da.pid, 'hello', 'world');
       da.call(da.pid, 'hello', 'to you').then(o => console.log(o));
@@ -364,14 +365,14 @@ TODO: replace this with proper testing
           .then(o => console.log('call-result', o))
           .then(() => da.call(da.pid, 'da:getIn', ['hi'], 432))
           .then(o => console.log('call-result', o))
-      );
+          );
       console.log(Object.keys(da));
       try {
         throw new Error();
       } catch(e) {
         console.log(jsonify(e));
       }
-        console.log(undefined);
+      console.log(undefined);
     };
     
 # License
