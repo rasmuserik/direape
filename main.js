@@ -37,88 +37,39 @@
 //
 // In the process of being redesigned/implemented, not done yet.
 //
-// ## Process / messages
-//
-// - [x] `da.pid` is the unique id of the current process
-// - [x] `da.parent` the pid of the parent process, and is assigned when created as a child process.
-// - [x] `da.call(pid, name, ...parameters) => promise` executes a named handle in a process
-// - [x] `da.run(pid, name, ...parameters)` executes a named handle in process, and discards the result.
-//
-// ## Defining handlers/reactions
-//
-// - [x] `da.handle("name", (...parameters) => promise)` adds a new event handler. When `name` is run/called, the function is executed, the new state replaces the old state, and the return/reject of the promise is returned.
-// - [x] `da.reaction(name, () => promise)` - adds a reactive handle, that is executed when the `name` is emitted, or the accessed parts of the state has changed.
-//
-// ## Accessing the application state
-//
-// - [x] `da.setJs([...keys], value)` sets a value, - only allowed to be called synchronously within a handler/reaction, to avoid race-conditions
-// - [x] `da.getJs([...keys], defaultVale) => value`
-//
-// Immutable value is publicly available yet, to avoid to expose immutable data structure implementation. TODO: maybe extend the api to make immutable value available. For example like `da.getIn([...keys], defaultVale) => Immutable`
-// 
-// ## Creating / killing children
-//
-// - [x] `da.children()` list of live child processes
-// - [x] `da.spawn(code) => promise` spawn a new process, execute the passed javascript, and return its pid as a promise
-// - [x] `da.kill(pid)` kill a child process
-//
-// ## Handlers
-//
-// - [x] `reun:run(src, base) ` 
-// - [x] `da:getIn(path) -> value` 
-// - [x] `da:setIn(path, value)` 
-// - [ ] `da:subscribe(path, handlerName)` - call `da.run(da.pid, handlerName, path, value)` on changes
-// - [ ] `da:unsubscribe(path, handlerName)`
-//
 // # API implementation
 //
-var immutable = require('immutable');
-var state = new immutable.Map();
-var prevState = state;
 var da = exports;
+
+// ## Defining handlers/reactions
+//
+// Keep track of the handlers/reactions. The keys are `name`, and the values are the corresponding functions.
+//
+// TODO: consider refactoring `handlers` to be a Map instead of an Object, - as we `delete`, which may be expensive.
+//
 var handlers = {};
-var reactions = {};
 
-// ## Process / messages
-
-da.pid = 'PID' + randomString();
-/* TODO: emit pid to parent */
-
-self.onmessage = o => {
-  da.parent = o.data;
-  self.onmessage = o => send(o.data);
-}
-
-da.run = function(pid, name) {
-  var params = slice(arguments, 2);
-  send({dstPid: pid, dstName: name, params: params});
-}
-
-da.call = function(pid, name) {
-  var params = slice(arguments, 2);
-  return new Promise((resolve, reject) => {
-    send({dstPid: pid, dstName: name, 
-      srcPid: da.pid,
-      srcName: callbackHandler((val, err) => err ? reject(err) : resolve(val)),
-      params: params})});
-}
-
-
-function callbackHandler(f) {
-  var id = 'callback:' + randomString();
-  handlers[id] = function() {
-    delete handlers[id];
-    return f.apply(null, slice(arguments));
-  }
-  return id;
-}
-
-// ## Handlers/reactions
+// `da.handle("name", (...parameters) => promise)` adds a new event handler. When `name` is run/called, the function is executed, the new state replaces the old state, and the return/reject of the promise is returned.
 //
 da.handle = (name, f) => {
   handlers[name] = f;
 };
 
+// `da.reaction(name, () => promise)` - adds a reactive handle, that is executed when the `name` is emitted, or the accessed parts of the state has changed.
+//
+da.reaction = (name, f) => {
+  handlers[name] = makeReaction(name, f);
+  return Promise.resolve(handlers[name]());
+}
+
+// 
+// The reactions object is used to keep track of which of the handlers that are reactions. 
+//
+// makeReaction, keeps track of whether a function is actually a reaction.
+//
+// TODO: think through whether there might be a bug: when a reaction is overwritten by a handler with the same name, - if the reaction is triggered, then it might call the handler?...
+//
+var reactions = {};
 function makeReaction(name, f) {
   reactions[name] = true;
   var reaction = function() {
@@ -130,14 +81,65 @@ function makeReaction(name, f) {
   }
   return reaction;
 }
-da.reaction = (name, f) => {
-  handlers[name] = makeReaction(name, f);
-  return Promise.resolve(handlers[name]());
+
+// ## Process / messages
+//
+// `da.pid` is the unique id of the current process. randomString has enough entropy, that we know with a probability as high as human certainty that the id is globally unique.
+
+da.pid = 'PID' + randomString();
+
+// `da.parent` the pid of the parent process. The first message the process gets(from its parent) is the parent id. After this, start properly dispatching messages that comes in from the parent.
+
+self.onmessage = o => {
+  da.parent = o.data;
+  self.onmessage = o => send(o.data);
+}
+
+// `da.run(pid, name, ...parameters)` executes a named handle in a process, and discards the result.
+
+da.run = function(pid, name) {
+  var params = slice(arguments, 2);
+  send({dstPid: pid, dstName: name, params: params});
+}
+
+// `da.call(pid, name, ...parameters) => promise` executes a named handle in a process, and returns the result as a promise. This is done by registring a temporary callback handler.
+
+da.call = function(pid, name) {
+  var params = slice(arguments, 2);
+  return new Promise((resolve, reject) => {
+    send({dstPid: pid, dstName: name, 
+      srcPid: da.pid,
+      srcName: callbackHandler((val, err) => 
+          err ? reject(err) : resolve(val)),
+      params: params})});
 }
 
 // ## Accessing the application state
+//
+// The state is an immutable value, which is useful for diffing, comparison, etc. The value only contains a JSON+Binary-object, such that it can always be serialised.
+//
+// Exposing an immutable object may also be useful outside of the library may be useful later on. It is not exposed / publicly available yet, to avoid exposing the immutable data structure, and we may want to use something simpler than the `immutable` library.
+//
+// TODO: extend the api to make immutable value available. For example like `da.getIn([...keys], defaultVale) => Immutable`. This is also why the api is called setJS/getJS, - as setIn/getIn should return immutable values.
 
-function setJs(o, path, value) {
+var immutable = require('immutable');
+var state = new immutable.Map();
+
+// `da.setJS([...keys], value)` sets a value, - only allowed to be called synchronously within a handler/reaction, to avoid race-conditions
+// 
+// Making a change may also trigger/schedule reaction to run later.
+
+da.setJS = (path, value) => { 
+  state = setJS(state, path, value); 
+  reschedule();
+};
+
+// Utility function for setting a value inside an immutable JSON object.
+// The state is kept JSON-compatible, and thus we create Map/Object or List/Array depending on whether the key is a number or string.
+//
+// TODO: better error handling, ie handle wrong types, i.e. setting a number in an object or vice versa
+
+function setJS(o, path, value) {
   /* TODO: check that we are in handler, or else throw */
   if(path.length) {
     var key = path[0];
@@ -149,38 +151,41 @@ function setJs(o, path, value) {
         o = new immutable.Map();
       }
     }
-    return o.set(key, setJs(o.get(path[0]), path.slice(1), value));
+    return o.set(key, setJS(o.get(path[0]), path.slice(1), value));
   } else {
     return immutable.fromJS(value);
   }
 }
-da.setJs = (path, value) => { 
-  state = setJs(state, path, value); 
-  reschedule();
-};
 
-da.getJs = (path, defaultValue) => {
+// `da.getJS([...keys], defaultValue)` gets a value within the state
+
+da.getJS = (path, defaultValue) => {
   var result = state.getIn(path);
   return result === undefined ? defaultValue :
     (result.toJS ? result.toJS() : result);
 };
 
 // ## Creating / killing children
+// 
+// Keep track of the child processes, by mapping their pid to their WebWorker object.
+//
+// TODO: may make sense to use a Map instead, as we do deletes.
 
-var baseUrl = self.location ? self.location.href : './';
-var workerSourceUrl;
 var children = {};
+
+// `da.spawn() => promise` spawn a new process, and return its pid as a promise.
+//
+// When the new worker is created, we send back and forth the pids, so the parent/children knows its child/parent. And then we also set up handling of messages.
+
 da.spawn = () => new Promise((resolve, reject) => {
-  /* TODO: execute src */
-  if(!workerSourceUrl) {
-    workerSourceUrl = 
+  /* TODO use https://unpkg.com/direape/worker.js instead */
+  var workerSourceUrl = 
       (self.URL || self.webkitURL).createObjectURL(new Blob([
           "importScripts('https://unpkg.com/reun');" +
           "reun.require('http://localhost:8080/main.js').then(da => {" +
           " self.postMessage(da.pid);" +
           "});"
           ], {type:'application/javascript'}));
-  }
   var child = new Worker(workerSourceUrl);
   child.onmessage = o => {
     var pid = o.data;
@@ -191,23 +196,38 @@ da.spawn = () => new Promise((resolve, reject) => {
   }
 });
 
+// `da.kill(pid)` kill a child process
+
 da.kill = (pid) => {
   children[pid].terminate();
   delete children[pid];
 };
 
+// `da.children()` lists live child processes
+
 da.children = () => Object.keys(children);
 
 
-// ## Handlers
+// ## Built-in Handlers
+
+// setIn/getIn
+
+da.handle('da:setIn', da.setJS);
+da.handle('da:getIn', da.getJS);
+
+// TODO: make `reun:run` result serialisable, currently we just discard it
+
+da.handle('reun:run', (src,baseUrl) => 
+    reun.run(src,baseUrl).then(() => undefined));
+
+// TODO:
 //
-da.handle('reun:run', (a,b) => reun.run(a,b).then(o=>{}));
-/*TODO: make reun:run result serialisable*/
-da.handle('da:setIn', da.setJs);
-da.handle('da:getIn', da.getJs);
+// - `da:subscribe(path, handlerName)` - call `da.run(da.pid, handlerName, path, value)` on changes
+// - `da:unsubscribe(path, handlerName)`
 
 // # Event loop
 //
+var prevState = state;
 var messageQueue = [];
 var scheduled = false;
 
@@ -233,7 +253,10 @@ function send(msg) {
 
 function sendResponse(msg, params) {
   if(msg.srcPid) {
-    send({dstPid: msg.srcPid, dstName: msg.srcName, params: params});
+    send({
+      dstPid: msg.srcPid, 
+      dstName: msg.srcName, 
+      params: params});
   }
 }
 function handleMessages() {
@@ -241,28 +264,43 @@ function handleMessages() {
   if(messageQueue.length) {
     var messages = messageQueue;
     messageQueue = [];
-    messages.forEach(msg => {
+    messages.forEach(handleMessage);
+  }
+  if(!prevState.equals(state)) {
+    /* TODO: only run reactions where 
+     * used parts of state had been changed */
+    Object.keys(reactions).forEach(
+        name => send({dstPid: da.pid, dstName: name}));
+    prevState = state;
+  }
+}
+function handleMessage(msg) {
       try {
-        Promise.resolve(handlers[msg.dstName].apply(null, msg.params))
+        Promise
+          .resolve(handlers[msg.dstName].apply(null, msg.params))
           .then(o => sendResponse(msg, [o]), 
               e => sendResponse(msg, [null, errorToJson(e)]));
       } catch(e) {
         sendResponse(msg, [null, errorToJson(e)]);
       }
-    });
-  }
-  if(!prevState.equals(state)) {
-    /* TODO: only run reactions where used parts of state had been changed */
-    Object.keys(reactions).forEach(name => send({dstPid: da.pid, dstName: name}));
-    prevState = state;
-  }
 }
 
 // # Utility functions
 
+function callbackHandler(f) {
+  var id = 'callback:' + randomString();
+  handlers[id] = function() {
+    delete handlers[id];
+    return f.apply(null, slice(arguments));
+  }
+  return id;
+}
+
 // ## Generic
+
 function errorToJson(e) {
-  /* TODO: better json representation of error, including stack trace*/
+  /* TODO: better json representation of error, 
+   * including stack trace*/
   return {error: e};
 }
 function randomString() {
@@ -278,35 +316,38 @@ function slice(a, start, end) {
 }
 
 // # Main / test
+//
+// this is currently just experimentation during development.
+//
+// TODO: replace this with proper testing
+
 da.main = () => {
   console.log('running', da.pid);
 
   da.reaction('blah', () => {
-    console.log('blah', da.getJs(['blah']));
+    console.log('blah', da.getJS(['blah']));
   });
 
-  da.setJs(['blah', 1, 'world'], "hi");
-  console.log('here', da.getJs(['blah']));
+  da.setJS(['blah', 1, 'world'], "hi");
+  console.log('here', da.getJS(['blah']));
 
   da.handle('hello', (t) => {
-   da.setJs(['blah'], '123');
+   da.setJS(['blah'], '123');
     console.log('hello', t);
    return 'hello' + t;
   });
   da.run(da.pid, 'hello', 'world');
   da.call(da.pid, 'hello', 'to you').then(o => console.log(o));
   da.call(da.pid, 'hello', 'to me').then(o => console.log(o));
-  da.setJs(['hi'], 'thread-1');
+  da.setJS(['hi'], 'thread-1');
   da.spawn().then(child =>
-      da.call(child, 'reun:run', 'require("./main.js").setJs(["hi"], "here");', 'http://localhost:8080/')
-      .then(() => 
-        da.call(child, 'da:getIn', ['hi'], 123).then(o =>
-        console.log('call-result', o))
-      )
-      .then(() => 
-        da.call(da.pid, 'da:getIn', ['hi'], 432).then(o =>
-        console.log('call-result', o))
-      )
+      da.call(child, 'reun:run', 
+        'require("./main.js").setJS(["hi"], "here");', 
+        'http://localhost:8080/')
+      .then(() => da.call(child, 'da:getIn', ['hi'], 123))
+      .then(o => console.log('call-result', o))
+      .then(() => da.call(da.pid, 'da:getIn', ['hi'], 432))
+      .then(o => console.log('call-result', o))
   );
   console.log(Object.keys(da));
 };
