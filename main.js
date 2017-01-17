@@ -173,7 +173,7 @@ da.spawn = () => new Promise((resolve, reject) => {
   var workerSourceUrl = 
       (self.URL || self.webkitURL).createObjectURL(new Blob([
           "importScripts('https://unpkg.com/reun');" +
-          "reun.require('http://localhost:8080/main.js').then(da => {" +
+          "reun.require('direape@0.1').then(da => {" +
           " self.postMessage(da.pid);" +
           "});"
           ], {type:'application/javascript'}));
