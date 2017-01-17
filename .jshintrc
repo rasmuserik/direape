@@ -1,0 +1,6 @@
+{ 
+  "globals": {
+    "require": true,
+    "module": true
+  }
+}
