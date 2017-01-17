@@ -1,8 +1,9 @@
-// <img src=https://direape.solsort.com/icon.png width=90 height=90 style=float:left;margin-right:20px>
-// [![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/) <br>
-// [![github](https://img.shields.io/badge/github-solsort/direape-blue.svg)](https://github.com/solsort/direape) <br>
-// [![travis](https://img.shields.io/travis/solsort/direape.svg)](https://travis-ci.org/solsort/direape) <br>
-// [![npm](https://img.shields.io/npm/v/direape.svg)](https://www.npmjs.com/package/direape) <br>
+// <img src=https://direape.solsort.com/icon.png width=128 height=128 align=right>
+//
+// [![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/) 
+// [![github](https://img.shields.io/badge/github-solsort/direape-blue.svg)](https://github.com/solsort/direape)
+// [![travis](https://img.shields.io/travis/solsort/direape.svg)](https://travis-ci.org/solsort/direape)
+// [![npm](https://img.shields.io/npm/v/direape.svg)](https://www.npmjs.com/package/direape)
 //
 // # DireApe - Distributed Reactive App Environment
 //
