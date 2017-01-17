@@ -1,9 +1,10 @@
-# <img src=https://direape.solsort.com/icon.png width=64 height=64> DireApe - Distributed Reactive App Environment
+<img src=https://direape.solsort.com/icon.png width=90 height=90 style=float:left;margin-right:20px>
+[![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/) <br>
+[![github](https://img.shields.io/badge/github-solsort/direape-blue.svg)](https://github.com/solsort/direape) <br>
+[![travis](https://img.shields.io/travis/solsort/direape.svg)](https://travis-ci.org/solsort/direape) <br>
+[![npm](https://img.shields.io/npm/v/direape.svg)](https://www.npmjs.com/package/direape) <br>
 
-[![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/)
-[![github](https://img.shields.io/badge/github-solsort/direape-blue.svg)](https://github.com/solsort/direape)
-[![travis](https://img.shields.io/travis/solsort/direape.svg)](https://travis-ci.org/solsort/direape)
-[![npm](https://img.shields.io/npm/v/direape.svg)](https://www.npmjs.com/package/direape)
+# DireApe - Distributed Reactive App Environment
 
 *Unstable - under development - do not use it yet*
 
@@ -22,20 +23,9 @@ The current supported processes are the browser main thread, and webworkers. The
 
 ## Reactive state
 
-The world state consist conceptually of an eventually consistent JSON-Object. The JSON-Object may also contain binary data, and is stored as an immmutable data structure, to allow fast diff'ing for reactive programming.
-The keys on the first level are PIDs, and the values on the first level is the state within the process.
-
-
-```JSON
-{ "PID1234": {"some": "state", "belonging to": "the process"},
-  "PID5678": {"some": "state", "belonging to": "another process"} }
-```
+Each process has a state that conceptually consist a consistent JSON-Object. The JSON-Object may also contain binary data, and is stored as an immmutable data structure, to allow fast diff'ing for reactive programming.
 
 It is possible to add reactive functions to the state, such that they are called when the state changes.
-
-# Public API
-
-In the process of being redesigned/implemented, not done yet.
 
 # API implementation
 
@@ -225,7 +215,20 @@ TODO:
 - `da:subscribe(path, handlerName)` - call `da.run(da.pid, handlerName, path, value)` on changes
 - `da:unsubscribe(path, handlerName)`
     
-# Event loop
+# Internal functions
+
+TODO more documentation in the rest of this file
+    
+    function callbackHandler(f) {
+      var id = 'callback:' + randomString();
+      handlers[id] = function() {
+        delete handlers[id];
+        return f.apply(null, slice(arguments));
+      }
+      return id;
+    }
+    
+## Event loop
 
     var prevState = state;
     var messageQueue = [];
@@ -285,18 +288,8 @@ TODO:
           }
     }
     
-# Utility functions
     
-    function callbackHandler(f) {
-      var id = 'callback:' + randomString();
-      handlers[id] = function() {
-        delete handlers[id];
-        return f.apply(null, slice(arguments));
-      }
-      return id;
-    }
-    
-## Generic
+## Generic utility function
     
     function errorToJson(e) {
       /* TODO: better json representation of error, 
