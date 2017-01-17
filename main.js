@@ -2,6 +2,7 @@
 //
 // [![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/) 
 // [![github](https://img.shields.io/badge/github-solsort/direape-blue.svg)](https://github.com/solsort/direape)
+// [![codeclimate](https://img.shields.io/codeclimate/github/solsort/direape.svg)](https://codeclimate.com/github/solsort/direape)
 // [![travis](https://img.shields.io/travis/solsort/direape.svg)](https://travis-ci.org/solsort/direape)
 // [![npm](https://img.shields.io/npm/v/direape.svg)](https://www.npmjs.com/package/direape)
 //
@@ -298,7 +299,7 @@ function jsonify(o) {
 }
 
 function jsonReplacer(o) {
-  if(typeof o !== 'object' || o === null || Array.isArray(o) || o.constructor === Object) {
+  if((typeof o !== 'object' && typeof o !== 'function') || o === null || Array.isArray(o) || o.constructor === Object) {
     return o;
   }
   var result = Object.assign({}, o);
