@@ -246,12 +246,13 @@ function send(msg) {
     messageQueue.push(msg);
     reschedule();
   } else if(children[msg.dstPid]) {
-    console.log('a');
     children[msg.dstPid].postMessage(msg);
   } else {
-    console.log('b', msg, da.pid, children);
+    try {
     self.postMessage(msg);
-    console.log('c');
+    } catch(e) {
+      console.log('send error', msg, e);
+    }
   }
 }
 

@@ -173,7 +173,7 @@ When the new worker is created, we send back and forth the pids, so the parent/c
       var workerSourceUrl = 
           (self.URL || self.webkitURL).createObjectURL(new Blob([
               "importScripts('https://unpkg.com/reun');" +
-              "reun.require('http://localhost:8080/main.js').then(da => {" +
+              "reun.require('direape@0.1').then(da => {" +
               " self.postMessage(da.pid);" +
               "});"
               ], {type:'application/javascript'}));
@@ -246,12 +246,13 @@ TODO more documentation in the rest of this file
         messageQueue.push(msg);
         reschedule();
       } else if(children[msg.dstPid]) {
-        console.log('a');
         children[msg.dstPid].postMessage(msg);
       } else {
-        console.log('b', msg, da.pid, children);
+        try {
         self.postMessage(msg);
-        console.log('c');
+        } catch(e) {
+          console.log('send error', msg, e);
+        }
       }
     }
     
