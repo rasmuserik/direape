@@ -209,7 +209,7 @@ setIn/getIn
 TODO: make `reun:run` result serialisable, currently we just discard it
     
     da.handle('reun:run', (src,baseUrl) => 
-        reun.run(src,baseUrl).then(() => undefined));
+        reun.run(src,baseUrl).then(o => jsonify(o)));
     
 TODO:
 
@@ -284,20 +284,40 @@ TODO more documentation in the rest of this file
             Promise
               .resolve(handlers[msg.dstName].apply(null, msg.params))
               .then(o => sendResponse(msg, [o]), 
-                  e => sendResponse(msg, [null, errorToJson(e)]));
+                  e => sendResponse(msg, [null, jsonify(e)]));
           } catch(e) {
-            sendResponse(msg, [null, errorToJson(e)]);
+            sendResponse(msg, [null, jsonify(e)]);
           }
     }
     
     
 ## Generic utility function
     
-    function errorToJson(e) {
-      /* TODO: better json representation of error, 
-       * including stack trace*/
-      return {error: e};
+    function jsonify(o) {
+      return JSON.parse(JSON.stringify([o], (k,v) => jsonReplacer(v)))[0];
     }
+    
+    function jsonReplacer(o) {
+      if(typeof o !== 'object' || o === null || Array.isArray(o) || o.constructor === Object) {
+        return o;
+      }
+      var result = Object.assign({}, o);
+      if(o.constructor && o.constructor.name && result.$_class === undefined) {
+        result.$_class = o.constructor.name;
+      }
+      if(o instanceof ArrayBuffer) {
+        /* TODO btoa does not work in arraybuffer, 
+         * and apply is probably slow.
+         * Also handle Actual typed arrays,
+         * in if above. */
+        result.base64 = self.btoa(String.fromCharCode.apply(null, new Uint8Array(o)))
+      }
+      if(o.stack) result.stack = o.stack;
+      if(o.name) result.name = o.name;
+      if(o.message) result.message = o.message;
+      return result;
+    }
+    
     function randomString() {
       return Math.random().toString(32).slice(2) +
         Math.random().toString(32).slice(2) +
@@ -345,6 +365,12 @@ TODO: replace this with proper testing
           .then(o => console.log('call-result', o))
       );
       console.log(Object.keys(da));
+      try {
+        throw new Error();
+      } catch(e) {
+        console.log(jsonify(e));
+      }
+        console.log(undefined);
     };
     
 # License
