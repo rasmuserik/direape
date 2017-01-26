@@ -182,7 +182,7 @@ var children = {};
 // When the new worker is created, we send back and forth the pids, so the parent/children knows its child/parent. And then we also set up handling of messages.
 
 da.spawn = () => new Promise((resolve, reject) => {
-  /* TODO use https://unpkg.com/direape/worker.js instead */
+  /* TODO remove this when verified that the below works
   var workerSourceUrl = 
     (self.URL || self.webkitURL).createObjectURL(new Blob([
           'importScripts(\'https://unpkg.com/reun\');' +
@@ -190,6 +190,8 @@ da.spawn = () => new Promise((resolve, reject) => {
           ' self.postMessage(da.pid);' +
           '});'
     ], {type:'application/javascript'}));
+    */
+  var workerSourceUrl = 'https://unpkg.com/direape@0.1/worker.js';
   var child = new Worker(workerSourceUrl);
   child.onmessage = o => {
     var pid = o.data;
