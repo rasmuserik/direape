@@ -2,7 +2,7 @@
   "name": "direape",
   "version": "0.1.5",
   "description": "Distributed Reactive App Environment",
-  "main": "main.js",
+  "main": "direape.js",
   "scripts": { "test": "true" },
   "repository": {
     "type": "git",
