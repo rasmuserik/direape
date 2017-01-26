@@ -50,6 +50,10 @@ da.handle = (name, f) => {
 // `da.reaction(name, () => promise)` - adds a reactive handle, that is executed when the `name` is emitted, or the accessed parts of the state has changed.
 //
 da.reaction = (name, f) => {
+  if(!f) {
+    delete reactions[name];
+    delete handlers[name];
+  }
   handlers[name] = makeReaction(name, f);
   return Promise.resolve(handlers[name]());
 };
@@ -89,23 +93,30 @@ self.onmessage = o => {
 
 // `da.run(pid, name, ...parameters)` executes a named handle in a process, and discards the result.
 
-da.run = (pid, name) => {
+da.run = function direape_run(pid, name) {
   var params = slice(arguments, 2);
   send({dstPid: pid, dstName: name, params: params});
-};
+}
 
 // `da.call(pid, name, ...parameters) => promise` executes a named handle in a process, and returns the result as a promise. This is done by registring a temporary callback handler.
 
-da.call = (pid, name) => {
+da.call = function direape_call(pid, name) {
+  console.log('call', arguments);
   var params = slice(arguments, 2);
   return new Promise((resolve, reject) => {
     send({dstPid: pid, dstName: name, 
       srcPid: da.pid,
-      srcName: callbackHandler((val, err) => 
-          err ? reject(err) : resolve(val)),
+      srcName: callbackHandler((val, err) => {
+        console.log('got-result', name, val, err);
+        if(err) {
+          reject(err);
+         } else {
+           resolve(val);
+         }
+      }),
       params: params});
   });
-};
+}
 
 // ## Accessing the application state
 //
@@ -201,7 +212,7 @@ da.kill = (pid) => {
 da.children = () => Object.keys(children);
 
 
-// ## Built-in Handlers
+// # Built-in Handlers
 
 // setIn/getIn
 
@@ -213,6 +224,12 @@ da.handle('da:getIn', da.getJS);
 da.handle('reun:run', (src,baseUrl) => 
     require('reun').run(src,baseUrl).then(o => jsonify(o)));
 
+da.handle('da:subscribe', (path, opt) => 
+    da.reaction(`da:subscribe ${path} -> ${opt.name}@${opt.pid}`,
+      () => da.run(opt.pid, opt.name, path, da.getJS(path))));
+
+da.handle('da:unsubscribe', (path, opt) => 
+    da.reaction(`da:subscribe ${path} -> ${opt.name}@${opt.pid}`));
 // TODO:
 //
 // - `da:subscribe(path, handlerName)` - call `da.run(da.pid, handlerName, path, value)` on changes
@@ -248,12 +265,18 @@ function send(msg) {
     messageQueue.push(msg);
     reschedule();
   } else if(children[msg.dstPid]) {
-    children[msg.dstPid].postMessage(msg);
+    try {
+      children[msg.dstPid].postMessage(msg);
+    } catch(e) {
+      console.log('send error', msg, e);
+      throw e;
+    }
   } else {
     try {
       self.postMessage(msg);
     } catch(e) {
       console.log('send error', msg, e);
+      throw e;
     }
   }
 }
@@ -283,6 +306,9 @@ function handleMessages() {
 }
 function handleMessage(msg) {
   try {
+    if(!handlers[msg.dstName]) {
+      throw new Error('No such handler: ' + msg.dstName);
+    }
     Promise
       .resolve(handlers[msg.dstName].apply(null, msg.params))
       .then(o => sendResponse(msg, [o]), 
@@ -338,9 +364,11 @@ function slice(a, start, end) {
 //
 // TODO: replace this with proper testing
 
+console.log('started', da.pid);
 da.main = () => {
   console.log('running', da.pid);
 
+  /*
   da.reaction('blah', () => {
     console.log('blah', da.getJS(['blah']));
   });
@@ -357,15 +385,19 @@ da.main = () => {
   da.call(da.pid, 'hello', 'to you').then(o => console.log(o));
   da.call(da.pid, 'hello', 'to me').then(o => console.log(o));
   da.setJS(['hi'], 'thread-1');
-  da.spawn().then(child =>
-      da.call(child, 'reun:run', 
-        'require("./main.js").setJS(["hi"], "here");', 
+  */
+  da.spawn().then(child => {
+    da.handle('log', function () { console.log('log', arguments)});
+    da.call(child, 'da:subscribe', ['hi'], {pid: da.pid, name: 'log'});
+    da.call(child, 'reun:run', 
+        'require("direape@0.1").setJS(["hi"], "here");', 
         'http://localhost:8080/')
+      .then(result => console.log('result', result))
       .then(() => da.call(child, 'da:getIn', ['hi'], 123))
       .then(o => console.log('call-result', o))
       .then(() => da.call(da.pid, 'da:getIn', ['hi'], 432))
       .then(o => console.log('call-result', o))
-      );
+  });
   console.log(Object.keys(da));
   try {
     throw new Error();
