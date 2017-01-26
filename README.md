@@ -110,13 +110,13 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
             console.log('got-result', name, val, err);
             if(err) {
               reject(err);
-             } else {
-               resolve(val);
-             }
+            } else {
+              resolve(val);
+            }
           }),
           params: params});
       });
-    }
+    };
     
 ## Accessing the application state
 
@@ -185,10 +185,10 @@ When the new worker is created, we send back and forth the pids, so the parent/c
       /* TODO use https://unpkg.com/direape/worker.js instead */
       var workerSourceUrl = 
         (self.URL || self.webkitURL).createObjectURL(new Blob([
-              "importScripts('https://unpkg.com/reun');" +
-              "reun.require('direape@0.1').then(da => {" +
-              " self.postMessage(da.pid);" +
-              "});"
+              'importScripts(\'https://unpkg.com/reun\');' +
+              'reun.require(\'direape@0.1\').then(da => {' +
+              ' self.postMessage(da.pid);' +
+              '});'
         ], {type:'application/javascript'}));
       var child = new Worker(workerSourceUrl);
       child.onmessage = o => {
@@ -369,23 +369,23 @@ TODO: replace this with proper testing
       console.log('running', da.pid);
     
       /*
-      da.reaction('blah', () => {
-        console.log('blah', da.getJS(['blah']));
-      });
+         da.reaction('blah', () => {
+         console.log('blah', da.getJS(['blah']));
+         });
     
-      da.setJS(['blah', 1, 'world'], 'hi');
-      console.log('here', da.getJS(['blah']));
+         da.setJS(['blah', 1, 'world'], 'hi');
+         console.log('here', da.getJS(['blah']));
     
-      da.handle('hello', (t) => {
-        da.setJS(['blah'], '123');
-        console.log('hello', t);
-        return 'hello' + t;
-      });
-      da.run(da.pid, 'hello', 'world');
-      da.call(da.pid, 'hello', 'to you').then(o => console.log(o));
-      da.call(da.pid, 'hello', 'to me').then(o => console.log(o));
-      da.setJS(['hi'], 'thread-1');
-      */
+         da.handle('hello', (t) => {
+         da.setJS(['blah'], '123');
+         console.log('hello', t);
+         return 'hello' + t;
+         });
+         da.run(da.pid, 'hello', 'world');
+         da.call(da.pid, 'hello', 'to you').then(o => console.log(o));
+         da.call(da.pid, 'hello', 'to me').then(o => console.log(o));
+         da.setJS(['hi'], 'thread-1');
+         */
       da.spawn().then(child => {
         da.handle('log', function () { console.log('log', arguments)});
         da.call(child, 'da:subscribe', ['hi'], {pid: da.pid, name: 'log'});
