@@ -96,7 +96,7 @@ self.onmessage = o => {
 da.run = function direape_run(pid, name) {
   var params = slice(arguments, 2);
   send({dstPid: pid, dstName: name, params: params});
-}
+};
 
 // `da.call(pid, name, ...parameters) => promise` executes a named handle in a process, and returns the result as a promise. This is done by registring a temporary callback handler.
 
@@ -182,16 +182,16 @@ var children = {};
 // When the new worker is created, we send back and forth the pids, so the parent/children knows its child/parent. And then we also set up handling of messages.
 
 da.spawn = () => new Promise((resolve, reject) => {
-  /* TODO remove this when verified that the below works
   var workerSourceUrl = 
     (self.URL || self.webkitURL).createObjectURL(new Blob([
-          'importScripts(\'https://unpkg.com/reun\');' +
-          'reun.require(\'direape@0.1\').then(da => {' +
-          ' self.postMessage(da.pid);' +
-          '});'
+        'importScripts(\'https://unpkg.com/reun\');' +
+        'reun.require(\'direape@0.1\').then(da => {' +
+        ' self.postMessage(da.pid);' +
+        '});'
     ], {type:'application/javascript'}));
-    */
+  /* TODO reun work in firefox cross origin (probably by letting main thread fetch code)
   var workerSourceUrl = 'https://unpkg.com/direape@0.1/worker.js';
+    */
   var child = new Worker(workerSourceUrl);
   child.onmessage = o => {
     var pid = o.data;
