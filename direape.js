@@ -101,13 +101,13 @@ da.run = function direape_run(pid, name) {
 // `da.call(pid, name, ...parameters) => promise` executes a named handle in a process, and returns the result as a promise. This is done by registring a temporary callback handler.
 
 da.call = function direape_call(pid, name) {
-  console.log('call', arguments);
+  //console.log('call', arguments);
   var params = slice(arguments, 2);
   return new Promise((resolve, reject) => {
     send({dstPid: pid, dstName: name, 
       srcPid: da.pid,
       srcName: callbackHandler((val, err) => {
-        console.log('got-result', name, val, err);
+        //console.log('got-result', name, val, err);
         if(err) {
           reject(err);
         } else {
@@ -366,7 +366,7 @@ function slice(a, start, end) {
 //
 // TODO: replace this with proper testing
 
-console.log('started', da.pid);
+//console.log('started', da.pid);
 da.main = () => {
   console.log('running', da.pid);
 
