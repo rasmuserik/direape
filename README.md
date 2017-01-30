@@ -333,16 +333,35 @@ May be temporarily exported, during development, but not intended to be used out
 TODO extract common code to common core library
     da._jsonify = jsonify;
     da._slice = slice;
+    da._jsonReplacer = jsonReplacer;
     
     function jsonify(o) {
       return JSON.parse(JSON.stringify([o], (k,v) => jsonReplacer(v)))[0];
     }
     
+    jsonifyWhitelist = 
+    ['stack', 'name', 'message', 
+      'timeStamp', 
+      'target', 'touches', 
+      'screenX', 'screenY', 'clientX', 'clientY',
+      'altKey', 'shiftKey', 'ctrlKey', 'metaKey',
+      'charCode', 'keyCode', 
+      'repeat', 
+      'id', 'class' 
+    ];
+    
     function jsonReplacer(o) {
       if((typeof o !== 'object' && typeof o !== 'function') || o === null || Array.isArray(o) || o.constructor === Object) {
         return o;
       }
-      var result = Object.assign({}, o);
+      var result, k, i;
+      if(typeof o.length === 'number') {
+        result = [];
+        for(i = 0; i < o.length; ++i) {
+          result[i] = o[i];
+        }
+      }
+      result = Object.assign({}, o);
       if(o.constructor && o.constructor.name && result.$_class === undefined) {
         result.$_class = o.constructor.name;
       }
@@ -353,9 +372,17 @@ TODO extract common code to common core library
          * in if above. */
         result.base64 = self.btoa(String.fromCharCode.apply(null, new Uint8Array(o)));
       }
-      if(o.stack) result.stack = o.stack;
-      if(o.name) result.name = o.name;
-      if(o.message) result.message = o.message;
+      if(result.$_class && result.$_class.slice(-5) === 'Event') {
+        for(k in o) {
+          result[k] = o[k];
+        }
+      }
+      for(i = 0; i < jsonifyWhitelist.length; ++i) {
+        k = jsonifyWhitelist[i] ;
+        if(o[k] !== undefined) {
+          result[k] = o[k];
+        }
+      }
       return result;
     }
     
@@ -418,6 +445,10 @@ console.log('started', da.pid);
         console.log(jsonify(e));
       }
       console.log(undefined);
+      document.body.onclick = function(e) {
+        console.log(jsonify(e));
+      }
+      document.body.click();
     };
     
 # License
