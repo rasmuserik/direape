@@ -289,7 +289,7 @@ TODO more documentation in the rest of this file
           dstPid: msg.srcPid, 
           dstName: msg.srcName, 
           params: params});
-      }
+      } 
     }
     function handleMessages() {
       scheduled = false;
@@ -309,7 +309,8 @@ TODO more documentation in the rest of this file
     function handleMessage(msg) {
       try {
         if(!handlers[msg.dstName]) {
-          throw new Error('No such handler: ' + msg.dstName);
+          console.log('Missing handler: ' + msg.dstName);
+          throw new Error('Missing handler: ' + msg.dstName);
         }
         Promise
           .resolve(handlers[msg.dstName].apply(null, msg.params))
