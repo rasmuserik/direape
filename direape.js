@@ -341,13 +341,7 @@ function jsonify(o) {
 
 var jsonifyWhitelist = 
 ['stack', 'name', 'message', 
-  'timeStamp', 
-  'target', 'touches', 
-  'screenX', 'screenY', 'clientX', 'clientY',
-  'altKey', 'shiftKey', 'ctrlKey', 'metaKey',
-  'charCode', 'keyCode', 
-  'repeat', 'value',
-  'id', 'class' 
+  'id', 'class', 'value'
 ];
 
 function jsonReplacer(o) {
