@@ -442,7 +442,7 @@ da.main = () => {
   console.log(undefined);
   document.body.onclick = function(e) {
     console.log(jsonify(e));
-  }
+  };
   document.body.click();
 };
 

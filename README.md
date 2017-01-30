@@ -339,14 +339,14 @@ TODO extract common code to common core library
       return JSON.parse(JSON.stringify([o], (k,v) => jsonReplacer(v)))[0];
     }
     
-    jsonifyWhitelist = 
+    var jsonifyWhitelist = 
     ['stack', 'name', 'message', 
       'timeStamp', 
       'target', 'touches', 
       'screenX', 'screenY', 'clientX', 'clientY',
       'altKey', 'shiftKey', 'ctrlKey', 'metaKey',
       'charCode', 'keyCode', 
-      'repeat', 
+      'repeat', 'value',
       'id', 'class' 
     ];
     
@@ -371,11 +371,6 @@ TODO extract common code to common core library
          * Also handle Actual typed arrays,
          * in if above. */
         result.base64 = self.btoa(String.fromCharCode.apply(null, new Uint8Array(o)));
-      }
-      if(result.$_class && result.$_class.slice(-5) === 'Event') {
-        for(k in o) {
-          result[k] = o[k];
-        }
       }
       for(i = 0; i < jsonifyWhitelist.length; ++i) {
         k = jsonifyWhitelist[i] ;
@@ -447,7 +442,7 @@ console.log('started', da.pid);
       console.log(undefined);
       document.body.onclick = function(e) {
         console.log(jsonify(e));
-      }
+      };
       document.body.click();
     };
     
