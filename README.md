@@ -184,14 +184,14 @@ When the new worker is created, we send back and forth the pids, so the parent/c
     da.spawn = () => new Promise((resolve, reject) => {
       var workerSourceUrl = 
         (self.URL || self.webkitURL).createObjectURL(new Blob([
-            'importScripts(\'https://unpkg.com/reun\');' +
-            'reun.require(\'direape@0.1\').then(da => {' +
-            ' self.postMessage(da.pid);' +
-            '});'
+              'importScripts(\'https://unpkg.com/reun\');' +
+              'reun.require(\'direape@0.1\').then(da => {' +
+                ' self.postMessage(da.pid);' +
+                  '});'
         ], {type:'application/javascript'}));
       /* TODO reun work in firefox cross origin (probably by letting main thread fetch code)
-      var workerSourceUrl = 'https://unpkg.com/direape@0.1/worker.js';
-        */
+         var workerSourceUrl = 'https://unpkg.com/direape@0.1/worker.js';
+         */
       var child = new Worker(workerSourceUrl);
       child.onmessage = o => {
         var pid = o.data;
@@ -270,8 +270,12 @@ TODO more documentation in the rest of this file
         try {
           children[msg.dstPid].postMessage(msg);
         } catch(e) {
-          console.log('send error', msg, e);
-          throw e;
+          try {
+            children[msg.dstPid].postMessage(jsonify(msg));
+          } catch(e2) {
+            console.log('send error', msg, e2);
+            throw e2;
+          }
         }
       } else {
         try {
@@ -323,6 +327,12 @@ TODO more documentation in the rest of this file
     
     
 ## Generic utility function
+
+May be temporarily exported, during development, but not intended to be used outside of module.
+    
+TODO extract common code to common core library
+    da._jsonify = jsonify;
+    da._slice = slice;
     
     function jsonify(o) {
       return JSON.parse(JSON.stringify([o], (k,v) => jsonReplacer(v)))[0];
