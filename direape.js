@@ -58,26 +58,6 @@ da.reaction = (name, f) => {
   return Promise.resolve(handlers[name]());
 };
 
-// 
-// The reactions object is used to keep track of which of the handlers that are reactions. 
-//
-// makeReaction, keeps track of whether a function is actually a reaction.
-//
-// TODO: think through whether there might be a bug: when a reaction is overwritten by a handler with the same name, - if the reaction is triggered, then it might call the handler?...
-//
-var reactions = {};
-function makeReaction(name, f) {
-  reactions[name] = true;
-  var reaction = function() {
-    if(handlers[name] !== reaction) {
-      delete reactions[name];
-    } else {
-      return f();
-    }
-  };
-  return reaction;
-}
-
 // ## Process / messages
 //
 // `da.pid` is the unique id of the current process. randomString has enough entropy, that we know with a probability as high as human certainty that the id is globally unique.
@@ -138,33 +118,11 @@ da.setJS = (path, value) => {
   reschedule();
 };
 
-// Utility function for setting a value inside an immutable JSON object.
-// The state is kept JSON-compatible, and thus we create Map/Object or List/Array depending on whether the key is a number or string.
-//
-// TODO: better error handling, ie handle wrong types, i.e. setting a number in an object or vice versa
-
-function setJS(o, path, value) {
-  /* TODO: check that we are in handler, or else throw */
-  if(path.length) {
-    var key = path[0];
-    var rest = path.slice(1);
-    if(!o) {
-      if(typeof key === 'number') {
-        o = new immutable.List();
-      } else {
-        o = new immutable.Map();
-      }
-    }
-    return o.set(key, setJS(o.get(path[0]), path.slice(1), value));
-  } else {
-    return immutable.fromJS(value);
-  }
-}
-
 // `da.getJS([...keys], defaultValue)` gets a value within the state
 
 da.getJS = (path, defaultValue) => {
   var result = state.getIn(path);
+  accessHistoryAdd(path);
   return result === undefined ? defaultValue :
     (result.toJS ? result.toJS() : result);
 };
@@ -250,11 +208,78 @@ function callbackHandler(f) {
   return id;
 }
 
+// ##  Setting af JS-value deeply inside an immutable json object
+//
+// Utility function for setting a value inside an immutable JSON object.
+// The state is kept JSON-compatible, and thus we create Map/Object or List/Array depending on whether the key is a number or string.
+//
+// TODO: better error handling, ie handle wrong types, i.e. setting a number in an object or vice versa
+
+function setJS(o, path, value) {
+  /* TODO: check that we are in handler, or else throw */
+  if(path.length) {
+    var key = path[0];
+    var rest = path.slice(1);
+    if(!o) {
+      if(typeof key === 'number') {
+        o = new immutable.List();
+      } else {
+        o = new immutable.Map();
+      }
+    }
+    return o.set(key, setJS(o.get(path[0]), path.slice(1), value));
+  } else {
+    return immutable.fromJS(value);
+  }
+}
+
+// ## Handling access history for reactions
+var accessHistory = undefined;
+function accessHistoryAdd(path) {
+  if(accessHistory) {
+    accessHistory.add(JSON.stringify(path));
+  }
+}
+
+// ## make reaction
+// 
+// The reactions object is used to keep track of which of the handlers that are reactions. 
+//
+// makeReaction, keeps track of whether a function is actually a reaction.
+//
+// TODO: think through whether there might be a bug: when a reaction is overwritten by a handler with the same name, - if the reaction is triggered, then it might call the handler?...
+//
+var reactions = {};
+function makeReaction(name, f) {
+  reactions[name] = true;
+  var reaction = function() {
+    if(handlers[name] !== reaction) {
+      delete reactions[name];
+      return;
+    } 
+    var prevAccessHistory = accessHistory;
+    accessHistory = new Set();
+    try {
+      f();
+    } catch(e) {
+      console.log('error during reaction', name, e);
+    }
+    if(reactions[name]) {
+      reactions[name] = accessHistory;
+    }
+    accessHistory = prevAccessHistory;
+  };
+  return reaction;
+}
+
+
 // ## Event loop
 //
 var prevState = state;
 var messageQueue = [];
 var scheduled = false;
+
+// ### request/schedule execution of reactions / sending pending messages
 
 function reschedule() {
   if(!scheduled) {
@@ -262,6 +287,9 @@ function reschedule() {
     scheduled = true;
   }
 }
+
+// ### Send a message
+
 function send(msg) {
   if(msg.dstPid === da.pid) {
     messageQueue.push(msg);
@@ -287,6 +315,8 @@ function send(msg) {
   }
 }
 
+// ### send a response to a message
+
 function sendResponse(msg, params) {
   if(msg.srcPid) {
     send({
@@ -295,6 +325,9 @@ function sendResponse(msg, params) {
       params: params});
   } 
 }
+
+// ### dispatch all messages in the message queue and run reactions
+
 function handleMessages() {
   scheduled = false;
   if(messageQueue.length) {
@@ -302,6 +335,12 @@ function handleMessages() {
     messageQueue = [];
     messages.forEach(handleMessage);
   }
+  scheduleReactions();
+}
+
+// ### Request reactions to be executed
+
+function scheduleReactions() {
   if(!prevState.equals(state)) {
     /* TODO: only run reactions where 
      * used parts of state had been changed */
@@ -310,6 +349,9 @@ function handleMessages() {
     prevState = state;
   }
 }
+
+// ### Handle a single message
+
 function handleMessage(msg) {
   try {
     if(!handlers[msg.dstName]) {
@@ -414,30 +456,36 @@ da.main = () => {
      da.call(da.pid, 'hello', 'to you').then(o => console.log(o));
      da.call(da.pid, 'hello', 'to me').then(o => console.log(o));
      da.setJS(['hi'], 'thread-1');
+     da.spawn().then(child => {
+     da.handle('log', function () { console.log('log', arguments); });
+     da.call(child, 'da:subscribe', ['hi'], {pid: da.pid, name: 'log'});
+     da.call(child, 'reun:run', 
+     'require("direape@0.1").setJS(["hi"], "here");', 
+     'http://localhost:8080/')
+     .then(result => console.log('result', result))
+     .then(() => da.call(child, 'da:getIn', ['hi'], 123))
+     .then(o => console.log('call-result', o))
+     .then(() => da.call(da.pid, 'da:getIn', ['hi'], 432))
+     .then(o => console.log('call-result', o));
+     });
+     console.log(Object.keys(da));
+     try {
+     throw new Error();
+     } catch(e) {
+     console.log(jsonify(e));
+     }
+     console.log(undefined);
+     document.body.onclick = function(e) {
+     console.log(jsonify(e));
+     };
+     document.body.click();
      */
-  da.spawn().then(child => {
-    da.handle('log', function () { console.log('log', arguments); });
-    da.call(child, 'da:subscribe', ['hi'], {pid: da.pid, name: 'log'});
-    da.call(child, 'reun:run', 
-        'require("direape@0.1").setJS(["hi"], "here");', 
-        'http://localhost:8080/')
-      .then(result => console.log('result', result))
-      .then(() => da.call(child, 'da:getIn', ['hi'], 123))
-      .then(o => console.log('call-result', o))
-      .then(() => da.call(da.pid, 'da:getIn', ['hi'], 432))
-      .then(o => console.log('call-result', o));
+  da.setJS(['foo'], 123);
+  da.reaction('a', o => {
+    console.log('a', da.getJS(['foo']));
   });
-  console.log(Object.keys(da));
-  try {
-    throw new Error();
-  } catch(e) {
-    console.log(jsonify(e));
-  }
-  console.log(undefined);
-  document.body.onclick = function(e) {
-    console.log(jsonify(e));
-  };
-  document.body.click();
+  setTimeout(o => da.setJS(['bar'], 456), 200);
+  setTimeout(o => da.setJS(['foo'], 789), 400);
 };
 
 // # License
