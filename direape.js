@@ -319,7 +319,7 @@ function send(msg) {
 // ### send a response to a message
 
 function sendResponse(msg, params) {
-  if(msg.srcPid) {
+  if(msg.srcPid && msg.srcName) {
     send({
       dstPid: msg.srcPid, 
       dstName: msg.srcName, 

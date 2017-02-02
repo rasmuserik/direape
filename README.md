@@ -53,9 +53,10 @@ TODO: consider refactoring `handlers` to be a Map instead of an Object, - as we 
       if(!f) {
         delete reactions[name];
         delete handlers[name];
+      } else {
+        handlers[name] = makeReaction(name, f);
+        return handlers[name];
       }
-      handlers[name] = makeReaction(name, f);
-      return Promise.resolve(handlers[name]());
     };
     
 ## Process / messages
@@ -251,7 +252,7 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
 
     var reactions = {};
     function makeReaction(name, f) {
-      reactions[name] = true;
+      reactions[name] = new Set(['[]']);
       var reaction = function() {
         if(handlers[name] !== reaction) {
           delete reactions[name];
@@ -318,7 +319,7 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
 ### send a response to a message
     
     function sendResponse(msg, params) {
-      if(msg.srcPid) {
+      if(msg.srcPid && msg.srcName) {
         send({
           dstPid: msg.srcPid, 
           dstName: msg.srcName, 
@@ -345,15 +346,28 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
         return;
       }
     
-      var name, accessed;
-      /* TODO: only run reactions where 
-       * used parts of state had been changed */
-      for(name in reactions) {
-        accessed = reactions[name];
-        console.log(accessed);
+      var name, accessedPaths, accessedPath, path, changed, prev, current;
+      for (name in reactions) {
+        accessedPaths = reactions[name];
+        changed = false;
+        for (accessedPath of accessedPaths) {
+          path = JSON.parse(accessedPath);
+          prev = prevState.getIn(path);
+          current = state.getIn(path);
+          if (prev !== current) {
+            if ((prev instanceof immutable.Map || 
+                  prev instanceof immutable.List)
+                && prev.equals(current)){
+              continue;
+            } 
+            changed = true;
+            break;
+          }
+        }
+        if(changed) {
+          send({dstPid: da.pid, dstName: name});
+        }
       }
-      Object.keys(reactions).forEach(
-          name => send({dstPid: da.pid, dstName: name}));
       prevState = state;
     }
     
@@ -490,6 +504,7 @@ console.log('started', da.pid);
       da.setJS(['foo'], 123);
       da.reaction('a', o => {
         console.log('a', da.getJS(['foo']));
+        console.log('b', da.getJS(['baz']));
       });
       setTimeout(o => da.setJS(['bar'], 456), 200);
       setTimeout(o => da.setJS(['foo'], 789), 400);
