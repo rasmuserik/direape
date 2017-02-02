@@ -341,13 +341,20 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
 ### Request reactions to be executed
     
     function scheduleReactions() {
-      if(!prevState.equals(state)) {
-        /* TODO: only run reactions where 
-         * used parts of state had been changed */
-        Object.keys(reactions).forEach(
-            name => send({dstPid: da.pid, dstName: name}));
-        prevState = state;
+      if(prevState.equals(state)) {
+        return;
       }
+    
+      var name, accessed;
+      /* TODO: only run reactions where 
+       * used parts of state had been changed */
+      for(name in reactions) {
+        accessed = reactions[name];
+        console.log(accessed);
+      }
+      Object.keys(reactions).forEach(
+          name => send({dstPid: da.pid, dstName: name}));
+      prevState = state;
     }
     
 ### Handle a single message

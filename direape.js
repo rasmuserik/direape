@@ -53,9 +53,10 @@ da.reaction = (name, f) => {
   if(!f) {
     delete reactions[name];
     delete handlers[name];
+  } else {
+    handlers[name] = makeReaction(name, f);
+    return handlers[name];
   }
-  handlers[name] = makeReaction(name, f);
-  return Promise.resolve(handlers[name]());
 };
 
 // ## Process / messages
@@ -251,7 +252,7 @@ function accessHistoryAdd(path) {
 //
 var reactions = {};
 function makeReaction(name, f) {
-  reactions[name] = true;
+  reactions[name] = new Set(['[]']);
   var reaction = function() {
     if(handlers[name] !== reaction) {
       delete reactions[name];
@@ -341,13 +342,33 @@ function handleMessages() {
 // ### Request reactions to be executed
 
 function scheduleReactions() {
-  if(!prevState.equals(state)) {
-    /* TODO: only run reactions where 
-     * used parts of state had been changed */
-    Object.keys(reactions).forEach(
-        name => send({dstPid: da.pid, dstName: name}));
-    prevState = state;
+  if(prevState.equals(state)) {
+    return;
   }
+
+  var name, accessedPaths, accessedPath, path, changed, prev, current;
+  for (name in reactions) {
+    accessedPaths = reactions[name];
+    changed = false;
+    for (accessedPath of accessedPaths) {
+      path = JSON.parse(accessedPath);
+      prev = prevState.getIn(path);
+      current = state.getIn(path);
+      if (prev !== current) {
+        if ((prev instanceof immutable.Map || 
+              prev instanceof immutable.List)
+            && prev.equals(current)){
+          continue;
+        } 
+        changed = true;
+        break;
+      }
+    }
+    if(changed) {
+      send({dstPid: da.pid, dstName: name});
+    }
+  }
+  prevState = state;
 }
 
 // ### Handle a single message
@@ -483,6 +504,7 @@ da.main = () => {
   da.setJS(['foo'], 123);
   da.reaction('a', o => {
     console.log('a', da.getJS(['foo']));
+    console.log('b', da.getJS(['baz']));
   });
   setTimeout(o => da.setJS(['bar'], 456), 200);
   setTimeout(o => da.setJS(['foo'], 789), 400);
