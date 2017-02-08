@@ -32,6 +32,7 @@
 // # API implementation
 //
 var da = exports;
+da.log = function() {};
 
 // ## Defining handlers/reactions
 //
@@ -63,14 +64,10 @@ da.reaction = (name, f) => {
 //
 // `da.pid` is the unique id of the current process. randomString has enough entropy, that we know with a probability as high as human certainty that the id is globally unique.
 
-da.pid = 'PID' + randomString();
+var reun = require('reun');
+da.pid = reun.pid || 'PID' + randomString();
 
-// `da.parent` the pid of the parent process. The first message the process gets(from its parent) is the parent id. After this, start properly dispatching messages that comes in from the parent.
-
-self.onmessage = o => {
-  da.parent = o.data;
-  self.onmessage = o => send(o.data);
-};
+self.onmessage = o => send(o.data);
 
 // `da.run(pid, name, ...parameters)` executes a named handle in a process, and discards the result.
 
@@ -141,24 +138,39 @@ var children = {};
 // When the new worker is created, we send back and forth the pids, so the parent/children knows its child/parent. And then we also set up handling of messages.
 
 da.spawn = () => new Promise((resolve, reject) => {
+  var childPid = 'PID' + randomString();
   var workerSourceUrl = 
-    (self.URL || self.webkitURL).createObjectURL(new Blob([
-          'importScripts(\'https://unpkg.com/reun\');' +
-          'reun.require(\'direape@0.1\').then(da => {' +
-            ' self.postMessage(da.pid);' +
-              '});'
-    ], {type:'application/javascript'}));
-  /* TODO reun work in firefox cross origin (probably by letting main thread fetch code)
-     var workerSourceUrl = 'https://unpkg.com/direape@0.1/worker.js';
-     */
-  var child = new Worker(workerSourceUrl);
-  child.onmessage = o => {
-    var pid = o.data;
-    children[pid] = child;
-    child.postMessage(da.pid);
-    child.onmessage = o => send(o.data);
-    resolve(pid);
-  };
+    (self.URL || self.webkitURL).createObjectURL(new Blob([`
+          importScripts('https://unpkg.com/reun');
+          reun.urlGet = function(url) { 
+            return new Promise((resolve, reject) => {
+              self.postMessage(url);
+              self.onmessage = o => {
+                resolve(o.data);
+              };
+            });
+          };
+          reun.pid = '${childPid}';
+          reun.require('direape@0.1').then(da => {
+          //reun.require('http://localhost:8080/direape.js').then(da => {
+          //da.log = function() { console.log.apply(console,da._slice(arguments))};
+          da.parent = '${da.pid}';
+          reun.urlGet = url => da.call(da.parent, 'reun:url-get', url);
+          self.postMessage({ready:true});
+          });
+          `], {type:'application/javascript'}));
+        var child = new Worker(workerSourceUrl);
+        children[childPid] = child;
+        child.onmessage = o => {
+          o = o.data;
+          if(o.ready) {
+            child.onmessage = o => send(o.data);
+            return resolve(childPid);
+          }
+          reun.urlGet(o).then(val => {
+            child.postMessage(val);
+          });
+        };
 });
 
 // `da.kill(pid)` kill a child process
@@ -175,6 +187,7 @@ da.children = () => Object.keys(children);
 
 // # Built-in Handlers
 
+da.handle('reun:url-get', reun.urlGet);
 // setIn/getIn
 
 da.handle('da:setIn', da.setJS);
@@ -183,11 +196,11 @@ da.handle('da:getIn', da.getJS);
 // TODO: make `reun:run` result serialisable, currently we just discard it
 
 da.handle('reun:run', (src,baseUrl) => 
-    require('reun').run(src,baseUrl).then(o => jsonify(o)));
+    reun.run(src,baseUrl).then(o => jsonify(o)));
 
 da.handle('da:subscribe', (path, opt) => 
-    da.reaction(`da:subscribe ${path} -> ${opt.name}@${opt.pid}`,
-      () => da.run(opt.pid, opt.name, path, da.getJS(path))));
+    jsonify(da.reaction(`da:subscribe ${path} -> ${opt.name}@${opt.pid}`,
+      () => da.run(opt.pid, opt.name, path, da.getJS(path)))));
 
 da.handle('da:unsubscribe', (path, opt) => 
     da.reaction(`da:subscribe ${path} -> ${opt.name}@${opt.pid}`));
@@ -374,6 +387,7 @@ function scheduleReactions() {
 // ### Handle a single message
 
 function handleMessage(msg) {
+  da.log('handleMessage', msg);
   try {
     if(!handlers[msg.dstName]) {
       console.log('Missing handler: ' + msg.dstName);
@@ -459,7 +473,7 @@ function slice(a, start, end) {
 //console.log('started', da.pid);
 da.main = () => {
   console.log('running', da.pid);
-
+  reun.log = da.log = function() { console.log(slice(arguments)); };
   /*
      da.reaction('blah', () => {
      console.log('blah', da.getJS(['blah']));
@@ -477,18 +491,20 @@ da.main = () => {
      da.call(da.pid, 'hello', 'to you').then(o => console.log(o));
      da.call(da.pid, 'hello', 'to me').then(o => console.log(o));
      da.setJS(['hi'], 'thread-1');
-     da.spawn().then(child => {
-     da.handle('log', function () { console.log('log', arguments); });
-     da.call(child, 'da:subscribe', ['hi'], {pid: da.pid, name: 'log'});
-     da.call(child, 'reun:run', 
-     'require("direape@0.1").setJS(["hi"], "here");', 
-     'http://localhost:8080/')
-     .then(result => console.log('result', result))
-     .then(() => da.call(child, 'da:getIn', ['hi'], 123))
-     .then(o => console.log('call-result', o))
-     .then(() => da.call(da.pid, 'da:getIn', ['hi'], 432))
-     .then(o => console.log('call-result', o));
-     });
+     */
+  da.spawn().then(child => {
+    da.handle('log', function () { console.log('log', arguments); });
+    da.call(child, 'da:subscribe', ['hi'], {pid: da.pid, name: 'log'});
+    da.call(child, 'reun:run', 
+        'require("http://localhost:8080/direape.js").setJS(["hi"], "here");', 
+        'http://localhost:8080/')
+      .then(result => console.log('result', result))
+      .then(() => da.call(child, 'da:getIn', ['hi'], 123))
+      .then(o => console.log('call-result', o))
+      .then(() => da.call(da.pid, 'da:getIn', ['hi'], 432))
+      .then(o => console.log('call-result', o));
+  });
+  /*
      console.log(Object.keys(da));
      try {
      throw new Error();
@@ -500,14 +516,14 @@ da.main = () => {
      console.log(jsonify(e));
      };
      document.body.click();
+     da.setJS(['foo'], 123);
+     da.reaction('a', o => {
+     console.log('a', da.getJS(['foo']));
+     console.log('b', da.getJS(['baz']));
+     });
+     setTimeout(o => da.setJS(['bar'], 456), 200);
+     setTimeout(o => da.setJS(['foo'], 789), 400);
      */
-  da.setJS(['foo'], 123);
-  da.reaction('a', o => {
-    console.log('a', da.getJS(['foo']));
-    console.log('b', da.getJS(['baz']));
-  });
-  setTimeout(o => da.setJS(['bar'], 456), 200);
-  setTimeout(o => da.setJS(['foo'], 789), 400);
 };
 
 // # License
