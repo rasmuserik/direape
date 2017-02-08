@@ -40,12 +40,12 @@ Keep track of the handlers/reactions. The keys are `name`, and the values are th
 
 TODO: consider refactoring `handlers` to be a Map instead of an Object, - as we `delete`, which may be expensive.
 
-    var handlers = {};
+    da._handlers = {};
     
 `da.handle("name", (...parameters) => promise)` adds a new event handler. When `name` is run/called, the function is executed, the new state replaces the old state, and the return/reject of the promise is returned.
 
     da.handle = (name, f) => {
-      handlers[name] = f;
+      da._handlers[name] = f;
     };
     
 `da.reaction(name, () => promise)` - adds a reactive handle, that is executed when the `name` is emitted, or the accessed parts of the state has changed.
@@ -53,10 +53,10 @@ TODO: consider refactoring `handlers` to be a Map instead of an Object, - as we 
     da.reaction = (name, f) => {
       if(!f) {
         delete reactions[name];
-        delete handlers[name];
+        delete da._handlers[name];
       } else {
-        handlers[name] = makeReaction(name, f);
-        return handlers[name];
+        da._handlers[name] = makeReaction(name, f);
+        return da._handlers[name];
       }
     };
     
@@ -215,8 +215,8 @@ TODO more documentation in the rest of this file
     
     function callbackHandler(f) {
       var id = 'callback:' + randomString();
-      handlers[id] = function() {
-        delete handlers[id];
+      da._handlers[id] = function() {
+        delete da._handlers[id];
         return f.apply(null, slice(arguments));
       };
       return id;
@@ -267,7 +267,7 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
     function makeReaction(name, f) {
       reactions[name] = new Set(['[]']);
       var reaction = function() {
-        if(handlers[name] !== reaction) {
+        if(da._handlers[name] !== reaction) {
           delete reactions[name];
           return;
         } 
@@ -305,6 +305,7 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
 ### Send a message
     
     function send(msg) {
+      da.log('send', msg);
       if(msg.dstPid === da.pid) {
         messageQueue.push(msg);
         reschedule();
@@ -332,7 +333,7 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
 ### send a response to a message
     
     function sendResponse(msg, params) {
-      if(msg.srcPid) {
+      if(msg.srcPid && msg.srcName) {
         send({
           dstPid: msg.srcPid, 
           dstName: msg.srcName, 
@@ -389,12 +390,12 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
     function handleMessage(msg) {
       da.log('handleMessage', msg);
       try {
-        if(!handlers[msg.dstName]) {
+        if(!da._handlers[msg.dstName]) {
           console.log('Missing handler: ' + msg.dstName);
           throw new Error('Missing handler: ' + msg.dstName);
         }
         Promise
-          .resolve(handlers[msg.dstName].apply(null, msg.params))
+          .resolve(da._handlers[msg.dstName].apply(null, msg.params))
           .then(o => sendResponse(msg, [o]), 
               e => sendResponse(msg, [null, jsonify(e)]));
       } catch(e) {
@@ -473,7 +474,7 @@ TODO: replace this with proper testing
 console.log('started', da.pid);
     da.main = () => {
       console.log('running', da.pid);
-      reun.log = da.log = function() { console.log(slice(arguments)); }
+      reun.log = da.log = function() { console.log(slice(arguments)); };
       /*
          da.reaction('blah', () => {
          console.log('blah', da.getJS(['blah']));
