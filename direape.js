@@ -35,7 +35,7 @@
   // ### `assertEquals(val1, val2)`
 
   da.assertEquals = (val1, val2) => 
-    equals(val1, val2) || throwAssert({type: 'equals', vals: [val1, val2]});
+    da.equals(val1, val2) || throwAssert({type: 'equals', vals: [val1, val2]});
 
   // ### `test([name], fn)`
   //
@@ -181,21 +181,12 @@
   da.nextId = () => ++prevId;
 
   //
-  // ### TODO `parseStack(error)`
+  // ### `sha256(str)`
   //
-  // ### TODO `equals(a,b)` (deep equal for Object/Array, otherwise `.equals(..)` or direct comparison)
-
-  function equals(a,b) {
-    return a === b;
-  }
-
-  // ### `sha256(str)`, `sha224(str)`
-  //
+  // Just an inline copy/loading of js-sha256 npm module.
+  // We wrap it in a function to pretend that we have a module loader.
 
   da.sha256 = (function() {
-
-    // #### inline copy/loading of js-sha256 npm module
-
     var module = {exports: {}};
     /*eslint-disable */
     /* [js-sha256]{@link https://github.com/emn178/js-sha256} @version 0.5.0 @author Chen, Yi-Cyuan [emn178@gmail.com] @copyright Chen, Yi-Cyuan 2014-2017 @license MIT */
@@ -204,19 +195,85 @@
     return module.exports;
   })();
 
-  // #### sha224
+  da.test('sha256', ()=>{
+    da.assertEquals(da.sha256(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+  });
+
+  // ### `sha224(str)`
 
   da.sha224 = da.sha256.sha224;
 
-  // #### usage/test
-
-  da.test('sha256', ()=>{
-    da.assertEquals(da.sha256(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
-    da.assertEquals(da.sha224('The quick brown fox jumps over the lazy dog'), 
+  da.test('sha224', ()=>{
+    da.assertEquals(
+        da.sha224('The quick brown fox jumps over the lazy dog'),
         '730e109bd7a8a32b1cb9d9a09aa2325d2430587ddbc0c38bad911525');
   });
 
 
+  // ### TODO `parseStack(error)`
+  //
+  // ### `equals(a,b)`
+  //
+  // (deep equal for Object/Array, otherwise `.equals(..)` or direct comparison)
+  // 
+  // TODO handle cyclic structures (via weak-map)
+  // TODO handle iterables
+
+  da.equals = (a,b) => {
+    if(a === b) {
+      return true;
+    }
+
+    if(typeof a !== 'object' ||
+        typeof b !== 'object' ||
+        a === null || b === null) {
+      return false;
+    }
+
+    if(Array.isArray(a)) {
+      if(!Array.isArray(b)) {
+        return false;
+      }
+      if(a.length !== b.length) {
+        return false;
+      }
+      for(var i = 0; i < a.length; ++i) {
+        if(!da.equals(a[i], b[i])) {
+          return false;
+        }
+      }
+      return true
+    }
+
+    if(a.constructor === Object) {
+      if(b.constructor !== Object) {
+        return false;
+      }
+      if(!da.equals( 
+            Object.keys(a).sort(),
+            Object.keys(b).sort())) {
+        return false;
+      }
+      for(var key in a) {
+        if(!da.equals(a[key] ,b[key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    if(typeof a.equals === 'function') {
+      return a.equals(b);
+    }
+    return false;
+  }
+
+  da.test('equals', () => {
+    da.assert(da.equals({a:[1,2],b:3},{b:3,a:[1,2]}));
+    da.assert(!da.equals({a:["1",2],b:3},{b:3,a:[1,2]}));
+    da.assertEquals({a:[1,2],b:3},{b:3,a:[1,2]});
+  });
+      
   // ## Message Passing
   //
   // ### TODO `handle(name, fn, opt)` 
