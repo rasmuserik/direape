@@ -9,7 +9,7 @@
 //
 // # !!! UNDER MAJOR REWRITE !!!
 //
-// Read up to date documentation on [AppEdit](https://appedit.solsort.com/gh/js/solsort/direape).
+// Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/gh/solsort/direape).
 //
 // # DireApe - Distributed Reactive App Environment
 // # !!! UNDER MAJOR REWRITE !!!
