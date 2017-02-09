@@ -72,8 +72,16 @@ TODO: only run desired modules
         }
       }
     
-### Implementation
+### Implementation details
 
+To get the call stack correct, to be able to report assert position, we throw an `Error` (which includes the stack on many browsers), and enrich it with more information.
+    
+      function throwAssert(o) {
+        var err = new Error('AssertError');
+        err.assert = o;
+        throw err;
+      }
+    
       da.test('assert',()=>{
         try {
           da.assertEquals(1,2);
@@ -83,18 +91,71 @@ TODO: only run desired modules
         }
       });
     
-      function throwAssert(o) {
-        var err = new Error('AssertError');
-        err.assert = o;
-        throw err;
-      }
-    
 ## Utilities
 
-### TODO `GET(url)` 
+### `GET(url)` 
 
-### TODO `jsonify(obj)`
+TODO: make it work with unpkg(cross-origin) in webworkers (through making request in main thread).
+TODO: test
+    
+      da.GET = function urlGet(url) {
+        return new Promise(function(resolve, reject) {
+          var xhr = new XMLHttpRequest();
+          xhr.open('GET', url);
+          xhr.onreadystatechange = () =>
+            xhr.readyState === 4 && 
+            ( ( xhr.status === 200 
+                && typeof xhr.responseText === 'string') 
+              ? resolve(xhr.responseText)
+              : reject(xhr));
+          xhr.send();
+        });
+      };
+    
+### `jsonify(obj)`
 
+Translate JavaScript objects JSON
+
+TODO: test, also test with nil
+    
+      da.jsonify = o => 
+        JSON.parse(JSON.stringify([o], (k,v) => jsonReplacer(v)))[0];
+    
+      function jsonReplacer(o) {
+        var jsonifyWhitelist = ['stack', 'name', 'message', 'id', 'class', 'value'];
+    
+        if((typeof o !== 'object' && typeof o !== 'function') || o === null || Array.isArray(o) || o.constructor === Object) {
+          return o;
+        }
+        var result, k, i;
+        if(typeof o.length === 'number') {
+          result = [];
+          for(i = 0; i < o.length; ++i) {
+            result[i] = o[i];
+          }
+        }
+        result = Object.assign({}, o);
+        if(o.constructor && o.constructor.name && result.$_class === undefined) {
+          result.$_class = o.constructor.name;
+        }
+        if(o instanceof ArrayBuffer) {
+
+TODO btoa does not work in arraybuffer, 
+and apply is probably slow.
+Also handle Actual typed arrays,
+in if above. 
+
+          result.base64 = self.btoa(String.fromCharCode.apply(null, new Uint8Array(o)));
+        }
+        for(i = 0; i < jsonifyWhitelist.length; ++i) {
+          k = jsonifyWhitelist[i] ;
+          if(o[k] !== undefined) {
+            result[k] = o[k];
+          }
+        }
+        return result;
+      }
+    
 ### `nextTick(fn)`
     
       function nextTick(f) {
@@ -114,13 +175,13 @@ TODO: only run desired modules
         da.assertEquals(slice([1,2,3], 1 , 2).length, 1);
       });
     
-### TODO `parseStack(error)`
-
 ### `nextId()`
     
       var prevId = 0;
       da.nextId = () => ++prevId;
     
+
+### TODO `parseStack(error)`
 
 ### TODO `equals(a,b)` (deep equal for Object/Array, otherwise `.equals(..)` or direct comparison)
     
@@ -164,7 +225,7 @@ TODO: only run desired modules
 
 ### TODO `call(pid, name, args...)`
 ### TODO `emit(pid, name, args...)`
-### `pid`, `nid`
+### TODO `pid`, `nid`
 
 pid = process-id
 `nid` node-id - process-id for main process
