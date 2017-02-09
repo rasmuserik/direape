@@ -195,8 +195,8 @@ setIn/getIn
     
 TODO: make `reun:run` result serialisable, currently we just discard it
     
-    da.handle('reun:run', (src,baseUrl) => 
-        reun.run(src,baseUrl).then(o => jsonify(o)));
+    da.handle('reun:run', (src, opt) => 
+        reun.run(src, opt).then(o => jsonify(o)));
     
     da.handle('da:subscribe', (path, opt) => 
         jsonify(da.reaction(`da:subscribe ${path} -> ${opt.name}@${opt.pid}`,
