@@ -1,3 +1,300 @@
+// <img src=https://reun.solsort.com/icon.png width=96 height=96 align=right> 
+// <img src=https://direape.solsort.com/icon.png width=96 height=96 align=right>
+//
+// [![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/) 
+// [![github](https://img.shields.io/badge/github-solsort/direape-blue.svg)](https://github.com/solsort/direape)
+// [![codeclimate](https://img.shields.io/codeclimate/github/solsort/direape.svg)](https://codeclimate.com/github/solsort/direape)
+// [![travis](https://img.shields.io/travis/solsort/direape.svg)](https://travis-ci.org/solsort/direape)
+// [![npm](https://img.shields.io/npm/v/direape.svg)](https://www.npmjs.com/package/direape)
+//
+// # !!! UNDER MAJOR REWRITE !!!
+// # DireApe - Distributed Reactive App Environment
+// # !!! UNDER MAJOR REWRITE !!!
+// 
+// API-overview
+//
+// - message passing
+//     - `handle(name, fn, opt)` - public if opt `{public:true}`, otherwise node only
+//     - `pid` process-id
+//     - `nid` node-id - process-id for main process
+//     - `call(pid, name, args..)`, `emit(pid, name, args..)`
+//     - `isMainThread()`
+// - main thread functions
+//     - `online([boolean/url])` - sends message 'da:online' and 'da:offline'
+//     - `children()`
+//     - `spawn()`
+//     - `kill(child-id)`
+// - reactive state
+//     - `setState(o)`
+//     - `getState()`
+//     - `reaction(f, params)` returns reaction, which when called returns result
+//     - `rerun(name, reaction)`
+// - module loader
+//     - `require(module-name, [opt])`, `eval(str|fn, [opt])`
+// - testing
+//     - `assert()`
+//     - `assertEquals(a, b)`
+//     - `test([label], f)`
+//     - `runTests(modules)`
+// - utilities
+//     - `GET(url)` -> promise of content, unpkg-cross-origin
+//     - `jsonify(obj)`
+//     - `slice(arr, i, j)`
+//     - `parseStack(error)`
+//     - `nextId()` (unique for process)
+//     - `equals(a,b)` (deep equal for Object/Array, otherwise `.equals(..)` or direct comparison)
+//     - `sha224(str)`
+//
+// ## Module Loader
+//
+// ## Message Passing
+//
+// ## Reactive State
+//
+// - dag, from a single source-input-reaction to a single drain-output-reaction.
+//
+// Reaction:
+//
+// - data
+//     - uid
+//     - exec-count (only increases when result changes)
+//     - fn
+//     - parameters
+//     - result
+//     - list of inputs (reactions accessed) from previous run, and their exec-count
+//     - list of outputs (who have output as (grand-)child)
+//  - code
+//     - update children(recursively) on change
+//     - get value (traverse undrained parents if no drain, and recalculate if needed)
+//
+// ## Threads
+//
+// ## Testing
+//
+// ## Utilities
+//
+// # REUN - require(unpkg) 
+//
+/*
+// 
+// Reun is:
+// 
+// - 100% client-side nodejs-like `require` for the browser.
+// - using https://unpkg.com/.
+// - dynamic, just `require(...)` whatever module you want from your source file. No need for `package.json`, - versions can be passed to require, i.e. `require('module@1.2.3')`.
+// - pretending to be a synchronous, even though it is asynchrounous. Tries to work in the typical cases, and will always fail in certain documented edge cases. Pragmatic, and not standard compliant.
+// - able to directly load many nodejs modules, that has not been packaged for the browser.
+// - adding custom functionality when desired, i.e. `module.meta`
+// 
+// ## API
+// 
+// - `reun.run(code, [opt])` execute `code`, where `code` is either a function, or the string source of a module. `require()` is available and is pretending to be synchronous, and done relative to the `opt.uri`. Returns a promise of the function result or module-exports.
+// - `reun.require(module)` loads a module, path is relative to the `location.href` if available. Returns a promise.
+// 
+// ## Usage example
+// 
+// `index.html`:
+// ```html
+// <!DOCTYPE html>
+// <html>
+//   <body>
+//     <script src=https://unpkg.com/reun></script>
+//     <script>reun.require('./example.js');</script>
+//   </body>
+// </html>
+// ```
+// 
+// `example.js`:
+// ```javascript
+// var uniq = require('uniq');
+// console.log(uniq([1,4,2,8,4,2,1,3,2]));
+// ```
+// 
+// ## Extensions
+// 
+// - `require('module@0.2.3')` allows you to require a specific version
+// - `module.meta` allows you to set meta information about your module, - this may later be used to automatically package the module for npm, cordova, ...
+// 
+// ## Incompatibilities
+// 
+// The implementation is a hack. We want to _pretend_ to be synchronous, but we also do not want to block the main thread. Instead `require` throws an exception when a module is not loaded yet. When we run a file, we catch this exception, load the module asynchrounously, and then rerun the file. Later on we might also search the source for `require("...")`, or `require('...')` and try to preload these modules, but this is not implemented yet.
+// 
+// Also we just resolve the module name as `'https://unpkg.com/' + module_name`. To be more compatible with node modules, we may check the `package.json` in the future to make sure that the relative paths in the require works.
+// 
+// - Custom exceptions from `require` should not caught.
+// - Code before a require, may be executed multiple times, - should be side-effect free.
+// - `require` may fail within callbacks, if the module has not been loaded before.
+// - If the source lives in a subdirectory, and the module is not packaged for the web, and contains relative paths, - the paths are wrongly resolved. A workaround is to `require('module/lib/index.js')` instead of `require('module')`.
+// - It does obviously not work with every module.
+// 
+// In spite of these limitations, it is still possible to `require` many nodejs module directly to the web.
+//
+// # Source Code
+
+(function() { "use strict";
+var reun = {};
+  reun.log = function() {};
+
+  // Http(s) get utility function, as `fetch` is not generally available yet.
+  //
+  reun.urlGet = function urlGet(url) {
+    reun.log('urlGet', url);
+    return new Promise(function(resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', url);
+      xhr.onreadystatechange = function() {
+        if(xhr.readyState === 4) {
+          if(xhr.status === 200 && typeof xhr.responseText === 'string') {
+            resolve(xhr.responseText);
+          } else {
+            reject(xhr);
+          }
+        }
+      }
+      xhr.send();
+    });
+  };
+
+
+  // When trying to load at module, that is not loaded yet, we throw this error:
+  //
+  function RequireError(module, url) { 
+    this.module = module; 
+    this.url = url;
+  }
+  RequireError.prototype.toString = function() {
+    return 'RequireError:' + this.module +
+      ' url:' + this.url;
+  }
+
+  // Convert a require-address to a url.
+  // path is baseurl used for mapping relative file paths (`./hello.js`) to url.
+  //
+  function moduleUrl(path, module) {
+    if(module.slice(0,4) === 'reun') {
+      return 'reun';
+    }
+    if(module.startsWith('https:') ||
+        module.startsWith('http:')) {
+      return module;
+    }
+    path = path.replace(/[?#].*.?/, '');
+    path = (module.startsWith('.')
+        ? path.replace(/[/][^/]*$/, '/')  
+        : 'https://unpkg.com/');
+    path = path + module;
+    while(path.indexOf('/./') !== -1) {
+      path = path.replace('/./', '/');
+    }
+    var prevPath;
+    do {
+      prevPath = path;
+      path = path.replace(/[/][^/]*[/][.][.][/]/g, '/');
+    } while(path !== prevPath);
+    return path;
+  }
+
+  var modules = {reun:reun};
+  function _eval(code, opt) {
+    var opt = opt || {};
+    reun.log('_eval', opt.uri);
+    var result, wrappedSrc, module;
+    var uri = typeof opt.uri === 'string' ? opt.uri : '';
+    var require = function require(module, opt) {
+      if(modules[module]) {
+        return modules[module];
+      }
+      var url = moduleUrl(uri, module);
+      if(!modules[url]) {
+        throw new RequireError(module, url);
+      } 
+      return modules[url];
+    };
+    if(typeof code === 'string') {
+      wrappedSrc = '(function(module,exports,require){' +
+        code + '})//# sourceURL=' + uri;
+      module = {
+        require: require,
+        id: uri.replace('https://unpkg.com/', ''),
+        uri: uri,
+        exports: {}};
+      code = function() {
+        eval(wrappedSrc)(module, module.exports, require);
+        return module.exports;
+      };
+    } else if(typeof self.require === 'undefined') {
+      self.require = require;
+    }
+    try {
+      result = code();
+    } catch (e) {
+      if(e.constructor !== RequireError) {
+        throw e;
+      }
+      return reun.urlGet(e.url)
+        .catch(function() {
+          throw new Error('require could not load "' + e.url + '" ' +
+              'Possibly module incompatible with http://reun.solsort.com/');
+        }).then(function(moduleSrc) {
+          return _eval(moduleSrc, {uri: e.url});
+        }).then(function(exports) {
+          modules[e.url] = exports;
+
+          // Find the short name of the module, and remember it by that alias,
+          // to make sure that later requires for the module without version/url
+          // returns the already loaded module.
+          //
+          if(e.url.startsWith('https://unpkg.com/') ||
+              exports.meta && exports.meta.id) {
+            var name = e.url
+              .replace('https://unpkg.com/', '')
+              .replace(/[@/].*.?/, '');
+          if(!modules[name]) {
+            modules[name] = exports;
+          }
+        }
+        }).then(function() {
+          return _eval(code, opt);
+        });
+    }
+    return Promise.resolve(result);
+  }
+
+  var evalQueue = Promise.resolve();
+
+  function doEval(code, opt) {
+    evalQueue = evalQueue.then(function() {
+      return _eval(code, opt);
+    }).catch(function(e) {
+      setTimeout(function() {
+        throw e;
+      }, 0);
+    });
+    return evalQueue;
+  }
+  reun.eval = doEval;
+
+  reun.require = function require(name) {
+    if(self.module && self.module.require) {
+      return Promise.resolve(require(name));
+    }
+    return doEval('module.exports = require(\'' + name + '\');', 
+        {uri: self.location && self.location.href || './'});
+  }
+
+  if(typeof module === 'object') {
+    module.exports = reun;
+  } else {
+    self.reun = reun;
+  }
+
+// # License
+// 
+// This software is copyrighted solsort.com ApS, and available under GPLv3, as well as proprietary license upon request.
+// 
+// Versions older than 10 years also fall into the public domain.
+// 
+
 // <img src=https://direape.solsort.com/icon.png width=96 height=96 align=right>
 //
 // [![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/) 
@@ -31,7 +328,8 @@
 // 
 // # API implementation
 //
-var da = exports;
+var da = reun;
+da.eval(() => {
 da.log = function() {};
 
 // ## Defining handlers/reactions
@@ -64,7 +362,6 @@ da.reaction = (name, f) => {
 //
 // `da.pid` is the unique id of the current process. randomString has enough entropy, that we know with a probability as high as human certainty that the id is globally unique.
 
-var reun = require('reun');
 da.pid = reun.pid || 'PID' + randomString();
 
 self.onmessage = o => send(o.data);
@@ -195,8 +492,8 @@ da.handle('da:getIn', da.getJS);
 
 // TODO: make `reun:run` result serialisable, currently we just discard it
 
-da.handle('reun:run', (src, opt) => 
-    reun.run(src, opt).then(o => jsonify(o)));
+da.handle('da:eval', (src, opt) => 
+    reun.eval(src, opt).then(o => jsonify(o)));
 
 da.handle('da:subscribe', (path, opt) => 
     jsonify(da.reaction(`da:subscribe ${path} -> ${opt.name}@${opt.pid}`,
@@ -230,8 +527,7 @@ function callbackHandler(f) {
 // TODO: better error handling, ie handle wrong types, i.e. setting a number in an object or vice versa
 
 function setJS(o, path, value) {
-  /* TODO: check that we are in handler, or else throw */
-  if(path.length) {
+  if(path.length) { // TODO: check that we are in handler, or else throw 
     var key = path[0];
     var rest = path.slice(1);
     if(!o) {
@@ -438,10 +734,12 @@ function jsonReplacer(o) {
     result.$_class = o.constructor.name;
   }
   if(o instanceof ArrayBuffer) {
-    /* TODO btoa does not work in arraybuffer, 
-     * and apply is probably slow.
-     * Also handle Actual typed arrays,
-     * in if above. */
+    //
+    // TODO btoa does not work in arraybuffer, 
+    // and apply is probably slow.
+    // Also handle Actual typed arrays,
+    // in if above. 
+    //
     result.base64 = self.btoa(String.fromCharCode.apply(null, new Uint8Array(o)));
   }
   for(i = 0; i < jsonifyWhitelist.length; ++i) {
@@ -465,6 +763,10 @@ function slice(a, start, end) {
   return Array.prototype.slice.call(a, start, end);
 }
 
+// # exports
+//
+self.direape = da;
+
 // # Main / test
 //
 // this is currently just experimentation during development.
@@ -475,7 +777,6 @@ function slice(a, start, end) {
 da.main = () => {
   console.log('running', da.pid);
   reun.log = da.log = function() { console.log(slice(arguments)); };
-  /*
      da.reaction('blah', () => {
      console.log('blah', da.getJS(['blah']));
      });
@@ -492,11 +793,10 @@ da.main = () => {
      da.call(da.pid, 'hello', 'to you').then(o => console.log(o));
      da.call(da.pid, 'hello', 'to me').then(o => console.log(o));
      da.setJS(['hi'], 'thread-1');
-     */
   da.spawn().then(child => {
     da.handle('log', function () { console.log('log', arguments); });
     da.call(child, 'da:subscribe', ['hi'], {pid: da.pid, name: 'log'});
-    da.call(child, 'reun:run', 
+    da.call(child, 'da:eval', 
         'require("http://localhost:8080/direape.js").setJS(["hi"], "here");', 
         'http://localhost:8080/')
       .then(result => console.log('result', result))
@@ -505,7 +805,6 @@ da.main = () => {
       .then(() => da.call(da.pid, 'da:getIn', ['hi'], 432))
       .then(o => console.log('call-result', o));
   });
-  /*
      console.log(Object.keys(da));
      try {
      throw new Error();
@@ -524,8 +823,10 @@ da.main = () => {
      });
      setTimeout(o => da.setJS(['bar'], 456), 200);
      setTimeout(o => da.setJS(['foo'], 789), 400);
-     */
 };
+});
+})();
+*/
 
 // # License
 // 
