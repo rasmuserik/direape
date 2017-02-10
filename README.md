@@ -16,6 +16,7 @@ Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/
 
     (function() {
       var da = self.direape || {};
+    
 ## Message Passing
 
 ### TODO `handle(name, fn, opt)` 
@@ -30,7 +31,7 @@ pid = process-id
 `nid` node-id - process-id for main process
 ### `isMainThread()`
     
-        da.isMainThread = () => da.pid === da.nid;
+      da.isMainThread = () => da.pid === da.nid;
     
 ## Main thread functions (spawn, and network)
 
@@ -72,109 +73,109 @@ Reaction:
 
 TODO: make it work with unpkg(cross-origin) in webworkers (through making request in main thread).
     
-        da.GET = function urlGet(url) {
-          return new Promise(function(resolve, reject) {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', url);
-            xhr.onreadystatechange = () =>
-              xhr.readyState === 4 && 
-              ( ( xhr.status === 200 
-                  && typeof xhr.responseText === 'string') 
-                ? resolve(xhr.responseText)
-                : reject(xhr));
-            xhr.send();
-          });
-        };
-        test('GET ok', () => da.GET('https://unpkg.com/direape'));
-        test('GET fail', () => da.GET('https://unpkg.com/direape/notfound')
-            .catch(() => 'error')
-            .then(ok => da.assertEquals('error', ok)));
+      da.GET = function urlGet(url) {
+        return new Promise(function(resolve, reject) {
+          var xhr = new XMLHttpRequest();
+          xhr.open('GET', url);
+          xhr.onreadystatechange = () =>
+            xhr.readyState === 4 && 
+            ( ( xhr.status === 200 
+                && typeof xhr.responseText === 'string') 
+              ? resolve(xhr.responseText)
+              : reject(xhr));
+          xhr.send();
+        });
+      };
+      test('GET ok', () => da.GET('https://unpkg.com/direape'));
+      test('GET fail', () => da.GET('https://unpkg.com/direape/notfound')
+          .catch(() => 'error')
+          .then(ok => da.assertEquals('error', ok)));
     
 ### `jsonify(obj)`
 
 Translate JavaScript objects JSON
 
     
-        da.jsonify = o => 
-          JSON.parse(JSON.stringify([o], (k,v) => jsonReplacer(v)))[0];
+      da.jsonify = o => 
+        JSON.parse(JSON.stringify([o], (k,v) => jsonReplacer(v)))[0];
     
-        test('jsonify', () => {
-          var e = new Error('argh');
-          e.stack = 'hello';
+      test('jsonify', () => {
+        var e = new Error('argh');
+        e.stack = 'hello';
     
-          da.assertEquals(da.jsonify(e), {
-            $_class: 'Error',
-            name:'Error',
-            message:'argh',
-            stack: 'hello'
-          });
-    
-          da.assertEquals(da.jsonify(function hello() { }), {
-            $_class: 'Function',
-            name: 'hello'
-          });
-    
-          da.assertEquals(da.jsonify(null), null);
+        da.assertEquals(da.jsonify(e), {
+          $_class: 'Error',
+          name:'Error',
+          message:'argh',
+          stack: 'hello'
         });
     
-        function jsonReplacer(o) {
-          var jsonifyWhitelist = ['stack', 'name', 'message', 'id', 'class', 'value'];
+        da.assertEquals(da.jsonify(function hello() { }), {
+          $_class: 'Function',
+          name: 'hello'
+        });
     
-          if((typeof o !== 'object' && typeof o !== 'function') || o === null || Array.isArray(o) || o.constructor === Object) {
-            return o;
+        da.assertEquals(da.jsonify(null), null);
+      });
+    
+      function jsonReplacer(o) {
+        var jsonifyWhitelist = ['stack', 'name', 'message', 'id', 'class', 'value'];
+    
+        if((typeof o !== 'object' && typeof o !== 'function') || o === null || Array.isArray(o) || o.constructor === Object) {
+          return o;
+        }
+        var result, k, i;
+        if(typeof o.length === 'number') {
+          result = [];
+          for(i = 0; i < o.length; ++i) {
+            result[i] = o[i];
           }
-          var result, k, i;
-          if(typeof o.length === 'number') {
-            result = [];
-            for(i = 0; i < o.length; ++i) {
-              result[i] = o[i];
-            }
-          }
-          result = Object.assign({}, o);
-          if(o.constructor && o.constructor.name && result.$_class === undefined) {
-            result.$_class = o.constructor.name;
-          }
-          if(o instanceof ArrayBuffer) {
+        }
+        result = Object.assign({}, o);
+        if(o.constructor && o.constructor.name && result.$_class === undefined) {
+          result.$_class = o.constructor.name;
+        }
+        if(o instanceof ArrayBuffer) {
 
 TODO btoa does not work in arraybuffer, 
 and apply is probably slow.
 Also handle Actual typed arrays,
 in if above. 
 
-            result.base64 = self.btoa(String.fromCharCode.apply(null, new Uint8Array(o)));
-          }
-          for(i = 0; i < jsonifyWhitelist.length; ++i) {
-            k = jsonifyWhitelist[i] ;
-            if(o[k] !== undefined) {
-              result[k] = o[k];
-            }
-          }
-          return result;
+          result.base64 = self.btoa(String.fromCharCode.apply(null, new Uint8Array(o)));
         }
+        for(i = 0; i < jsonifyWhitelist.length; ++i) {
+          k = jsonifyWhitelist[i] ;
+          if(o[k] !== undefined) {
+            result[k] = o[k];
+          }
+        }
+        return result;
+      }
     
 ### `nextTick(fn)`
     
-        function nextTick(f) {
-          setTimeout(f, 0);
-        }
+      function nextTick(f) {
+        setTimeout(f, 0);
+      }
     
 ### `slice(arr, i, j)`
 
     
-        function slice(a, start, end) {
-          return Array.prototype.slice.call(a, start, end);
-        }
+      function slice(a, start, end) {
+        return Array.prototype.slice.call(a, start, end);
+      }
     
-        test('slice', () => {
-          da.assertEquals(slice([1,2,3]).length, 3);
-          da.assertEquals(slice([1,2,3], 1)[1], 3);
-          da.assertEquals(slice([1,2,3], 1 , 2).length, 1);
-        });
+      test('slice', () => {
+        da.assertEquals(slice([1,2,3]).length, 3);
+        da.assertEquals(slice([1,2,3], 1)[1], 3);
+        da.assertEquals(slice([1,2,3], 1 , 2).length, 1);
+      });
     
 ### `nextId()`
     
-        var prevId = 0;
-        da.nextId = () => ++prevId;
+      var prevId = 0;
+      da.nextId = () => ++prevId;
     
 
 ### `sha256(str)`
@@ -182,28 +183,28 @@ in if above.
 Just an inline copy/loading of js-sha256 npm module.
 We wrap it in a function to pretend that we have a module loader.
     
-        da.sha256 = (function() {
-          var module = {exports: {}};
-          /*eslint-disable */
-          /* [js-sha256]{@link https://github.com/emn178/js-sha256} @version 0.5.0 @author Chen, Yi-Cyuan [emn178@gmail.com] @copyright Chen, Yi-Cyuan 2014-2017 @license MIT */
-          !function(){"use strict";function t(t,h){h?(c[0]=c[16]=c[1]=c[2]=c[3]=c[4]=c[5]=c[6]=c[7]=c[8]=c[9]=c[10]=c[11]=c[12]=c[13]=c[14]=c[15]=0,this.blocks=c):this.blocks=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],t?(this.h0=3238371032,this.h1=914150663,this.h2=812702999,this.h3=4144912697,this.h4=4290775857,this.h5=1750603025,this.h6=1694076839,this.h7=3204075428):(this.h0=1779033703,this.h1=3144134277,this.h2=1013904242,this.h3=2773480762,this.h4=1359893119,this.h5=2600822924,this.h6=528734635,this.h7=1541459225),this.block=this.start=this.bytes=0,this.finalized=this.hashed=!1,this.first=!0,this.is224=t}var h="object"==typeof window?window:{},i=!h.JS_SHA256_NO_NODE_JS&&"object"==typeof process&&process.versions&&process.versions.node;i&&(h=global);var s=!h.JS_SHA256_NO_COMMON_JS&&"object"==typeof module&&module.exports,e="function"==typeof define&&define.amd,r="undefined"!=typeof ArrayBuffer,n="0123456789abcdef".split(""),o=[-2147483648,8388608,32768,128],a=[24,16,8,0],f=[1116352408,1899447441,3049323471,3921009573,961987163,1508970993,2453635748,2870763221,3624381080,310598401,607225278,1426881987,1925078388,2162078206,2614888103,3248222580,3835390401,4022224774,264347078,604807628,770255983,1249150122,1555081692,1996064986,2554220882,2821834349,2952996808,3210313671,3336571891,3584528711,113926993,338241895,666307205,773529912,1294757372,1396182291,1695183700,1986661051,2177026350,2456956037,2730485921,2820302411,3259730800,3345764771,3516065817,3600352804,4094571909,275423344,430227734,506948616,659060556,883997877,958139571,1322822218,1537002063,1747873779,1955562222,2024104815,2227730452,2361852424,2428436474,2756734187,3204031479,3329325298],u=["hex","array","digest","arrayBuffer"],c=[],p=function(h,i){return function(s){return new t(i,!0).update(s)[h]()}},d=function(h){var s=p("hex",h);i&&(s=y(s,h)),s.create=function(){return new t(h)},s.update=function(t){return s.create().update(t)};for(var e=0;e<u.length;++e){var r=u[e];s[r]=p(r,h)}return s},y=function(t,h){var i=require("crypto"),s=require("buffer").Buffer,e=h?"sha224":"sha256",n=function(h){if("string"==typeof h)return i.createHash(e).update(h,"utf8").digest("hex");if(r&&h instanceof ArrayBuffer)h=new Uint8Array(h);else if(void 0===h.length)return t(h);return i.createHash(e).update(new s(h)).digest("hex")};return n};t.prototype.update=function(t){if(!this.finalized){var i="string"!=typeof t;i&&r&&t instanceof h.ArrayBuffer&&(t=new Uint8Array(t));for(var s,e,n=0,o=t.length||0,f=this.blocks;o>n;){if(this.hashed&&(this.hashed=!1,f[0]=this.block,f[16]=f[1]=f[2]=f[3]=f[4]=f[5]=f[6]=f[7]=f[8]=f[9]=f[10]=f[11]=f[12]=f[13]=f[14]=f[15]=0),i)for(e=this.start;o>n&&64>e;++n)f[e>>2]|=t[n]<<a[3&e++];else for(e=this.start;o>n&&64>e;++n)s=t.charCodeAt(n),128>s?f[e>>2]|=s<<a[3&e++]:2048>s?(f[e>>2]|=(192|s>>6)<<a[3&e++],f[e>>2]|=(128|63&s)<<a[3&e++]):55296>s||s>=57344?(f[e>>2]|=(224|s>>12)<<a[3&e++],f[e>>2]|=(128|s>>6&63)<<a[3&e++],f[e>>2]|=(128|63&s)<<a[3&e++]):(s=65536+((1023&s)<<10|1023&t.charCodeAt(++n)),f[e>>2]|=(240|s>>18)<<a[3&e++],f[e>>2]|=(128|s>>12&63)<<a[3&e++],f[e>>2]|=(128|s>>6&63)<<a[3&e++],f[e>>2]|=(128|63&s)<<a[3&e++]);this.lastByteIndex=e,this.bytes+=e-this.start,e>=64?(this.block=f[16],this.start=e-64,this.hash(),this.hashed=!0):this.start=e}return this}},t.prototype.finalize=function(){if(!this.finalized){this.finalized=!0;var t=this.blocks,h=this.lastByteIndex;t[16]=this.block,t[h>>2]|=o[3&h],this.block=t[16],h>=56&&(this.hashed||this.hash(),t[0]=this.block,t[16]=t[1]=t[2]=t[3]=t[4]=t[5]=t[6]=t[7]=t[8]=t[9]=t[10]=t[11]=t[12]=t[13]=t[14]=t[15]=0),t[15]=this.bytes<<3,this.hash()}},t.prototype.hash=function(){var t,h,i,s,e,r,n,o,a,u,c,p=this.h0,d=this.h1,y=this.h2,l=this.h3,b=this.h4,v=this.h5,g=this.h6,w=this.h7,k=this.blocks;for(t=16;64>t;++t)e=k[t-15],h=(e>>>7|e<<25)^(e>>>18|e<<14)^e>>>3,e=k[t-2],i=(e>>>17|e<<15)^(e>>>19|e<<13)^e>>>10,k[t]=k[t-16]+h+k[t-7]+i<<0;for(c=d&y,t=0;64>t;t+=4)this.first?(this.is224?(o=300032,e=k[0]-1413257819,w=e-150054599<<0,l=e+24177077<<0):(o=704751109,e=k[0]-210244248,w=e-1521486534<<0,l=e+143694565<<0),this.first=!1):(h=(p>>>2|p<<30)^(p>>>13|p<<19)^(p>>>22|p<<10),i=(b>>>6|b<<26)^(b>>>11|b<<21)^(b>>>25|b<<7),o=p&d,s=o^p&y^c,n=b&v^~b&g,e=w+i+n+f[t]+k[t],r=h+s,w=l+e<<0,l=e+r<<0),h=(l>>>2|l<<30)^(l>>>13|l<<19)^(l>>>22|l<<10),i=(w>>>6|w<<26)^(w>>>11|w<<21)^(w>>>25|w<<7),a=l&p,s=a^l&d^o,n=w&b^~w&v,e=g+i+n+f[t+1]+k[t+1],r=h+s,g=y+e<<0,y=e+r<<0,h=(y>>>2|y<<30)^(y>>>13|y<<19)^(y>>>22|y<<10),i=(g>>>6|g<<26)^(g>>>11|g<<21)^(g>>>25|g<<7),u=y&l,s=u^y&p^a,n=g&w^~g&b,e=v+i+n+f[t+2]+k[t+2],r=h+s,v=d+e<<0,d=e+r<<0,h=(d>>>2|d<<30)^(d>>>13|d<<19)^(d>>>22|d<<10),i=(v>>>6|v<<26)^(v>>>11|v<<21)^(v>>>25|v<<7),c=d&y,s=c^d&l^u,n=v&g^~v&w,e=b+i+n+f[t+3]+k[t+3],r=h+s,b=p+e<<0,p=e+r<<0;this.h0=this.h0+p<<0,this.h1=this.h1+d<<0,this.h2=this.h2+y<<0,this.h3=this.h3+l<<0,this.h4=this.h4+b<<0,this.h5=this.h5+v<<0,this.h6=this.h6+g<<0,this.h7=this.h7+w<<0},t.prototype.hex=function(){this.finalize();var t=this.h0,h=this.h1,i=this.h2,s=this.h3,e=this.h4,r=this.h5,o=this.h6,a=this.h7,f=n[t>>28&15]+n[t>>24&15]+n[t>>20&15]+n[t>>16&15]+n[t>>12&15]+n[t>>8&15]+n[t>>4&15]+n[15&t]+n[h>>28&15]+n[h>>24&15]+n[h>>20&15]+n[h>>16&15]+n[h>>12&15]+n[h>>8&15]+n[h>>4&15]+n[15&h]+n[i>>28&15]+n[i>>24&15]+n[i>>20&15]+n[i>>16&15]+n[i>>12&15]+n[i>>8&15]+n[i>>4&15]+n[15&i]+n[s>>28&15]+n[s>>24&15]+n[s>>20&15]+n[s>>16&15]+n[s>>12&15]+n[s>>8&15]+n[s>>4&15]+n[15&s]+n[e>>28&15]+n[e>>24&15]+n[e>>20&15]+n[e>>16&15]+n[e>>12&15]+n[e>>8&15]+n[e>>4&15]+n[15&e]+n[r>>28&15]+n[r>>24&15]+n[r>>20&15]+n[r>>16&15]+n[r>>12&15]+n[r>>8&15]+n[r>>4&15]+n[15&r]+n[o>>28&15]+n[o>>24&15]+n[o>>20&15]+n[o>>16&15]+n[o>>12&15]+n[o>>8&15]+n[o>>4&15]+n[15&o];return this.is224||(f+=n[a>>28&15]+n[a>>24&15]+n[a>>20&15]+n[a>>16&15]+n[a>>12&15]+n[a>>8&15]+n[a>>4&15]+n[15&a]),f},t.prototype.toString=t.prototype.hex,t.prototype.digest=function(){this.finalize();var t=this.h0,h=this.h1,i=this.h2,s=this.h3,e=this.h4,r=this.h5,n=this.h6,o=this.h7,a=[t>>24&255,t>>16&255,t>>8&255,255&t,h>>24&255,h>>16&255,h>>8&255,255&h,i>>24&255,i>>16&255,i>>8&255,255&i,s>>24&255,s>>16&255,s>>8&255,255&s,e>>24&255,e>>16&255,e>>8&255,255&e,r>>24&255,r>>16&255,r>>8&255,255&r,n>>24&255,n>>16&255,n>>8&255,255&n];return this.is224||a.push(o>>24&255,o>>16&255,o>>8&255,255&o),a},t.prototype.array=t.prototype.digest,t.prototype.arrayBuffer=function(){this.finalize();var t=new ArrayBuffer(this.is224?28:32),h=new DataView(t);return h.setUint32(0,this.h0),h.setUint32(4,this.h1),h.setUint32(8,this.h2),h.setUint32(12,this.h3),h.setUint32(16,this.h4),h.setUint32(20,this.h5),h.setUint32(24,this.h6),this.is224||h.setUint32(28,this.h7),t};var l=d();l.sha256=l,l.sha224=d(!0),s?module.exports=l:(h.sha256=l.sha256,h.sha224=l.sha224,e&&define(function(){return l}))}();
-          /*eslint-enable */
-          return module.exports;
-        })();
+      da.sha256 = (function() {
+        var module = {exports: {}};
+        /*eslint-disable */
+        /* [js-sha256]{@link https://github.com/emn178/js-sha256} @version 0.5.0 @author Chen, Yi-Cyuan [emn178@gmail.com] @copyright Chen, Yi-Cyuan 2014-2017 @license MIT */
+        !function(){"use strict";function t(t,h){h?(c[0]=c[16]=c[1]=c[2]=c[3]=c[4]=c[5]=c[6]=c[7]=c[8]=c[9]=c[10]=c[11]=c[12]=c[13]=c[14]=c[15]=0,this.blocks=c):this.blocks=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],t?(this.h0=3238371032,this.h1=914150663,this.h2=812702999,this.h3=4144912697,this.h4=4290775857,this.h5=1750603025,this.h6=1694076839,this.h7=3204075428):(this.h0=1779033703,this.h1=3144134277,this.h2=1013904242,this.h3=2773480762,this.h4=1359893119,this.h5=2600822924,this.h6=528734635,this.h7=1541459225),this.block=this.start=this.bytes=0,this.finalized=this.hashed=!1,this.first=!0,this.is224=t}var h="object"==typeof window?window:{},i=!h.JS_SHA256_NO_NODE_JS&&"object"==typeof process&&process.versions&&process.versions.node;i&&(h=global);var s=!h.JS_SHA256_NO_COMMON_JS&&"object"==typeof module&&module.exports,e="function"==typeof define&&define.amd,r="undefined"!=typeof ArrayBuffer,n="0123456789abcdef".split(""),o=[-2147483648,8388608,32768,128],a=[24,16,8,0],f=[1116352408,1899447441,3049323471,3921009573,961987163,1508970993,2453635748,2870763221,3624381080,310598401,607225278,1426881987,1925078388,2162078206,2614888103,3248222580,3835390401,4022224774,264347078,604807628,770255983,1249150122,1555081692,1996064986,2554220882,2821834349,2952996808,3210313671,3336571891,3584528711,113926993,338241895,666307205,773529912,1294757372,1396182291,1695183700,1986661051,2177026350,2456956037,2730485921,2820302411,3259730800,3345764771,3516065817,3600352804,4094571909,275423344,430227734,506948616,659060556,883997877,958139571,1322822218,1537002063,1747873779,1955562222,2024104815,2227730452,2361852424,2428436474,2756734187,3204031479,3329325298],u=["hex","array","digest","arrayBuffer"],c=[],p=function(h,i){return function(s){return new t(i,!0).update(s)[h]()}},d=function(h){var s=p("hex",h);i&&(s=y(s,h)),s.create=function(){return new t(h)},s.update=function(t){return s.create().update(t)};for(var e=0;e<u.length;++e){var r=u[e];s[r]=p(r,h)}return s},y=function(t,h){var i=require("crypto"),s=require("buffer").Buffer,e=h?"sha224":"sha256",n=function(h){if("string"==typeof h)return i.createHash(e).update(h,"utf8").digest("hex");if(r&&h instanceof ArrayBuffer)h=new Uint8Array(h);else if(void 0===h.length)return t(h);return i.createHash(e).update(new s(h)).digest("hex")};return n};t.prototype.update=function(t){if(!this.finalized){var i="string"!=typeof t;i&&r&&t instanceof h.ArrayBuffer&&(t=new Uint8Array(t));for(var s,e,n=0,o=t.length||0,f=this.blocks;o>n;){if(this.hashed&&(this.hashed=!1,f[0]=this.block,f[16]=f[1]=f[2]=f[3]=f[4]=f[5]=f[6]=f[7]=f[8]=f[9]=f[10]=f[11]=f[12]=f[13]=f[14]=f[15]=0),i)for(e=this.start;o>n&&64>e;++n)f[e>>2]|=t[n]<<a[3&e++];else for(e=this.start;o>n&&64>e;++n)s=t.charCodeAt(n),128>s?f[e>>2]|=s<<a[3&e++]:2048>s?(f[e>>2]|=(192|s>>6)<<a[3&e++],f[e>>2]|=(128|63&s)<<a[3&e++]):55296>s||s>=57344?(f[e>>2]|=(224|s>>12)<<a[3&e++],f[e>>2]|=(128|s>>6&63)<<a[3&e++],f[e>>2]|=(128|63&s)<<a[3&e++]):(s=65536+((1023&s)<<10|1023&t.charCodeAt(++n)),f[e>>2]|=(240|s>>18)<<a[3&e++],f[e>>2]|=(128|s>>12&63)<<a[3&e++],f[e>>2]|=(128|s>>6&63)<<a[3&e++],f[e>>2]|=(128|63&s)<<a[3&e++]);this.lastByteIndex=e,this.bytes+=e-this.start,e>=64?(this.block=f[16],this.start=e-64,this.hash(),this.hashed=!0):this.start=e}return this}},t.prototype.finalize=function(){if(!this.finalized){this.finalized=!0;var t=this.blocks,h=this.lastByteIndex;t[16]=this.block,t[h>>2]|=o[3&h],this.block=t[16],h>=56&&(this.hashed||this.hash(),t[0]=this.block,t[16]=t[1]=t[2]=t[3]=t[4]=t[5]=t[6]=t[7]=t[8]=t[9]=t[10]=t[11]=t[12]=t[13]=t[14]=t[15]=0),t[15]=this.bytes<<3,this.hash()}},t.prototype.hash=function(){var t,h,i,s,e,r,n,o,a,u,c,p=this.h0,d=this.h1,y=this.h2,l=this.h3,b=this.h4,v=this.h5,g=this.h6,w=this.h7,k=this.blocks;for(t=16;64>t;++t)e=k[t-15],h=(e>>>7|e<<25)^(e>>>18|e<<14)^e>>>3,e=k[t-2],i=(e>>>17|e<<15)^(e>>>19|e<<13)^e>>>10,k[t]=k[t-16]+h+k[t-7]+i<<0;for(c=d&y,t=0;64>t;t+=4)this.first?(this.is224?(o=300032,e=k[0]-1413257819,w=e-150054599<<0,l=e+24177077<<0):(o=704751109,e=k[0]-210244248,w=e-1521486534<<0,l=e+143694565<<0),this.first=!1):(h=(p>>>2|p<<30)^(p>>>13|p<<19)^(p>>>22|p<<10),i=(b>>>6|b<<26)^(b>>>11|b<<21)^(b>>>25|b<<7),o=p&d,s=o^p&y^c,n=b&v^~b&g,e=w+i+n+f[t]+k[t],r=h+s,w=l+e<<0,l=e+r<<0),h=(l>>>2|l<<30)^(l>>>13|l<<19)^(l>>>22|l<<10),i=(w>>>6|w<<26)^(w>>>11|w<<21)^(w>>>25|w<<7),a=l&p,s=a^l&d^o,n=w&b^~w&v,e=g+i+n+f[t+1]+k[t+1],r=h+s,g=y+e<<0,y=e+r<<0,h=(y>>>2|y<<30)^(y>>>13|y<<19)^(y>>>22|y<<10),i=(g>>>6|g<<26)^(g>>>11|g<<21)^(g>>>25|g<<7),u=y&l,s=u^y&p^a,n=g&w^~g&b,e=v+i+n+f[t+2]+k[t+2],r=h+s,v=d+e<<0,d=e+r<<0,h=(d>>>2|d<<30)^(d>>>13|d<<19)^(d>>>22|d<<10),i=(v>>>6|v<<26)^(v>>>11|v<<21)^(v>>>25|v<<7),c=d&y,s=c^d&l^u,n=v&g^~v&w,e=b+i+n+f[t+3]+k[t+3],r=h+s,b=p+e<<0,p=e+r<<0;this.h0=this.h0+p<<0,this.h1=this.h1+d<<0,this.h2=this.h2+y<<0,this.h3=this.h3+l<<0,this.h4=this.h4+b<<0,this.h5=this.h5+v<<0,this.h6=this.h6+g<<0,this.h7=this.h7+w<<0},t.prototype.hex=function(){this.finalize();var t=this.h0,h=this.h1,i=this.h2,s=this.h3,e=this.h4,r=this.h5,o=this.h6,a=this.h7,f=n[t>>28&15]+n[t>>24&15]+n[t>>20&15]+n[t>>16&15]+n[t>>12&15]+n[t>>8&15]+n[t>>4&15]+n[15&t]+n[h>>28&15]+n[h>>24&15]+n[h>>20&15]+n[h>>16&15]+n[h>>12&15]+n[h>>8&15]+n[h>>4&15]+n[15&h]+n[i>>28&15]+n[i>>24&15]+n[i>>20&15]+n[i>>16&15]+n[i>>12&15]+n[i>>8&15]+n[i>>4&15]+n[15&i]+n[s>>28&15]+n[s>>24&15]+n[s>>20&15]+n[s>>16&15]+n[s>>12&15]+n[s>>8&15]+n[s>>4&15]+n[15&s]+n[e>>28&15]+n[e>>24&15]+n[e>>20&15]+n[e>>16&15]+n[e>>12&15]+n[e>>8&15]+n[e>>4&15]+n[15&e]+n[r>>28&15]+n[r>>24&15]+n[r>>20&15]+n[r>>16&15]+n[r>>12&15]+n[r>>8&15]+n[r>>4&15]+n[15&r]+n[o>>28&15]+n[o>>24&15]+n[o>>20&15]+n[o>>16&15]+n[o>>12&15]+n[o>>8&15]+n[o>>4&15]+n[15&o];return this.is224||(f+=n[a>>28&15]+n[a>>24&15]+n[a>>20&15]+n[a>>16&15]+n[a>>12&15]+n[a>>8&15]+n[a>>4&15]+n[15&a]),f},t.prototype.toString=t.prototype.hex,t.prototype.digest=function(){this.finalize();var t=this.h0,h=this.h1,i=this.h2,s=this.h3,e=this.h4,r=this.h5,n=this.h6,o=this.h7,a=[t>>24&255,t>>16&255,t>>8&255,255&t,h>>24&255,h>>16&255,h>>8&255,255&h,i>>24&255,i>>16&255,i>>8&255,255&i,s>>24&255,s>>16&255,s>>8&255,255&s,e>>24&255,e>>16&255,e>>8&255,255&e,r>>24&255,r>>16&255,r>>8&255,255&r,n>>24&255,n>>16&255,n>>8&255,255&n];return this.is224||a.push(o>>24&255,o>>16&255,o>>8&255,255&o),a},t.prototype.array=t.prototype.digest,t.prototype.arrayBuffer=function(){this.finalize();var t=new ArrayBuffer(this.is224?28:32),h=new DataView(t);return h.setUint32(0,this.h0),h.setUint32(4,this.h1),h.setUint32(8,this.h2),h.setUint32(12,this.h3),h.setUint32(16,this.h4),h.setUint32(20,this.h5),h.setUint32(24,this.h6),this.is224||h.setUint32(28,this.h7),t};var l=d();l.sha256=l,l.sha224=d(!0),s?module.exports=l:(h.sha256=l.sha256,h.sha224=l.sha224,e&&define(function(){return l}))}();
+        /*eslint-enable */
+        return module.exports;
+      })();
     
-        test('sha256', ()=>{
-          da.assertEquals(da.sha256(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
-        });
+      test('sha256', ()=>{
+        da.assertEquals(da.sha256(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+      });
     
 ### `sha224(str)`
     
-        da.sha224 = da.sha256.sha224;
+      da.sha224 = da.sha256.sha224;
     
-        test('sha224', ()=>{
-          da.assertEquals(
-              da.sha224('The quick brown fox jumps over the lazy dog'),
-              '730e109bd7a8a32b1cb9d9a09aa2325d2430587ddbc0c38bad911525');
-        });
+      test('sha224', ()=>{
+        da.assertEquals(
+            da.sha224('The quick brown fox jumps over the lazy dog'),
+            '730e109bd7a8a32b1cb9d9a09aa2325d2430587ddbc0c38bad911525');
+      });
     
     
 ### `equals(a,b)`
@@ -213,60 +214,60 @@ We wrap it in a function to pretend that we have a module loader.
 TODO handle cyclic structures (via weak-map)
 TODO handle iterables
     
-        da.equals = (a,b) => {
-          if(a === b) {
-            return true;
-          }
+      da.equals = (a,b) => {
+        if(a === b) {
+          return true;
+        }
     
-          if(typeof a !== 'object' ||
-              typeof b !== 'object' ||
-              a === null || b === null) {
-            return false;
-          }
-    
-          if(Array.isArray(a)) {
-            if(!Array.isArray(b)) {
-              return false;
-            }
-            if(a.length !== b.length) {
-              return false;
-            }
-            for(var i = 0; i < a.length; ++i) {
-              if(!da.equals(a[i], b[i])) {
-                return false;
-              }
-            }
-            return true
-          }
-    
-          if(a.constructor === Object) {
-            if(b.constructor !== Object) {
-              return false;
-            }
-            if(!da.equals( 
-                  Object.keys(a).sort(),
-                  Object.keys(b).sort())) {
-              return false;
-            }
-            for(var key in a) {
-              if(!da.equals(a[key] ,b[key])) {
-                return false;
-              }
-            }
-            return true;
-          }
-    
-          if(typeof a.equals === 'function') {
-            return a.equals(b);
-          }
+        if(typeof a !== 'object' ||
+            typeof b !== 'object' ||
+            a === null || b === null) {
           return false;
         }
     
-        test('equals', () => {
-          da.assert(da.equals({a:[1,2],b:3},{b:3,a:[1,2]}));
-          da.assert(!da.equals({a:["1",2],b:3},{b:3,a:[1,2]}));
-          da.assertEquals({a:[1,2],b:3},{b:3,a:[1,2]});
-        });
+        if(Array.isArray(a)) {
+          if(!Array.isArray(b)) {
+            return false;
+          }
+          if(a.length !== b.length) {
+            return false;
+          }
+          for(var i = 0; i < a.length; ++i) {
+            if(!da.equals(a[i], b[i])) {
+              return false;
+            }
+          }
+          return true
+        }
+    
+        if(a.constructor === Object) {
+          if(b.constructor !== Object) {
+            return false;
+          }
+          if(!da.equals( 
+                Object.keys(a).sort(),
+                Object.keys(b).sort())) {
+            return false;
+          }
+          for(var key in a) {
+            if(!da.equals(a[key] ,b[key])) {
+              return false;
+            }
+          }
+          return true;
+        }
+    
+        if(typeof a.equals === 'function') {
+          return a.equals(b);
+        }
+        return false;
+      }
+    
+      test('equals', () => {
+        da.assert(da.equals({a:[1,2],b:3},{b:3,a:[1,2]}));
+        da.assert(!da.equals({a:["1",2],b:3},{b:3,a:[1,2]}));
+        da.assertEquals({a:[1,2],b:3},{b:3,a:[1,2]});
+      });
     
 ### TODO `parseStack(err)`
 
@@ -329,63 +330,65 @@ TODO: only run desired modules
     
         p.then(() => {
           if(err) {
-            console.log(`Test error in '${t.testName || ''}': ${err.message}`);
-              if(err.assert) {
-                try {
-                  console.log(JSON.stringify(err.assert));
-                } catch(e) {
-                  console.log(err.assert);
-                }
+            console.log('Test error in "' +
+                (t.testName || '') +
+                ': ' + err.message);
+            if(err.assert) {
+              try {
+                console.log(JSON.stringify(err.assert));
+              } catch(e) {
+                console.log(err.assert);
               }
-    
-              if(err.stack) {
-                console.log(err.stack);
-              }
-    
-              throw err;
-            } else {
-              console.log('Test ok', t.testName || '');
             }
-          });
-        }
     
-        if(false) {
-           test('must error 1', () => da.assert(false));
-           test('must error 2', () => new Promise(() => da.assert(false)));
-           test('must error 3', () => new Promise((reject, resolve) => {true}));
-        }
+            if(err.stack) {
+              console.log(err.stack);
+            }
+    
+            throw err;
+          } else {
+            console.log('Test ok', t.testName || '');
+          }
+        });
+      }
+    
+      if(false) {
+        test('must error 1', () => da.assert(false));
+        test('must error 2', () => new Promise(() => da.assert(false)));
+        test('must error 3', () => new Promise((reject, resolve) => {true}));
+      }
     
 ### Implementation details
 
 To get the call stack correct, to be able to report assert position, we throw an `Error` (which includes the stack on many browsers), and enrich it with more information.
     
-        function throwAssert(o) {
-          var err = new Error('AssertError');
-          err.assert = o;
-          throw err;
-        }
+      function throwAssert(o) {
+        var err = new Error('AssertError');
+        err.assert = o;
+        throw err;
+      }
     
-        test('assert',()=>{
-          try {
-            da.assertEquals(1,2);
-          } catch(e) {
-            da.assert(e.message === 'AssertError');
-            da.assert(typeof e.stack === 'string');
-          }
-        });
+      test('assert',()=>{
+        try {
+          da.assertEquals(1,2);
+        } catch(e) {
+          da.assert(e.message === 'AssertError');
+          da.assert(typeof e.stack === 'string');
+        }
+      });
     
 ## Done
 
-        if(typeof module === 'undefined') {
-          self.direape = da;
-        } else {
-          module.exports = da;
-        }
-      })();
+      if(typeof module === 'undefined') {
+        self.direape = da;
+      } else {
+        module.exports = da;
+      }
+    })();
 # Old
 ## REUN - require(unpkg) 
 
-      /*
+    /*
 
 Reun is:
 
@@ -441,21 +444,21 @@ In spite of these limitations, it is still possible to `require` many nodejs mod
 
 ## Source Code
     
-      (function() { "use strict";
-      var reun = {};
-      reun.log = function() {};
+    (function() { "use strict";
+    var reun = {};
+    reun.log = function() {};
     
 Http(s) get utility function, as `fetch` is not generally available yet.
 
-      reun.urlGet = function urlGet(url) {
-      reun.log('urlGet', url);
-      return new Promise(function(resolve, reject) {
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', url);
-      xhr.onreadystatechange = function() {
-      if(xhr.readyState === 4) {
-      if(xhr.status === 200 && typeof xhr.responseText === 'string') {
-      resolve(xhr.responseText);
+    reun.urlGet = function urlGet(url) {
+    reun.log('urlGet', url);
+    return new Promise(function(resolve, reject) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url);
+    xhr.onreadystatechange = function() {
+    if(xhr.readyState === 4) {
+    if(xhr.status === 200 && typeof xhr.responseText === 'string') {
+    resolve(xhr.responseText);
     } else {
       reject(xhr);
     }
