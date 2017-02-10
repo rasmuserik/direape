@@ -14,18 +14,8 @@ Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/
 # DireApe - Distributed Reactive App Environment
 # !!! UNDER MAJOR REWRITE !!!
 
-## API-overview
-
-## Initialisation
-
     (function() {
-      var global = self;
-      var da = global.direape || {};
-      if(typeof module === 'undefined') {
-        self.direape = da;
-      } else {
-        module.exports = da;
-      }
+      var da = self.direape || {};
 ## Testing
     
 ### `assert(bool)`
@@ -42,7 +32,8 @@ Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/
 TODO: keep track of which module tests belongs to
      
       var tests = [];
-      da.test = (name, f) => {
+      da.test = test;
+      function test(name, f) {
         if(!f) {
           f = name; name= undefined;
         }
@@ -52,25 +43,51 @@ TODO: keep track of which module tests belongs to
     
 ### `runTests(modules)`
 
-TODO: async tests, promise-timeout
 TODO: only run desired modules
     
       da.runTests = (modules) => { // TODO: run for named modules
         for(var i = 0; i < tests.length; ++i) {
-          console.log('running tests:', tests[i].testName || '');
-          try {
-            tests[i]();
-          } catch(e) {
-            console.log('Test error', tests[i].testName || '');
-            try {
-              console.log(JSON.stringify(e.assert));
-            } catch(e) {
-              console.log(e.assert);
-            }
-            throw e;
-          }
+          runTest(tests[i]);
         }
       }
+    
+      var testTimeout = 5000;
+    
+      function runTest(t) {
+        var err, p;
+    
+        try {
+          p = Promise.resolve(t());
+        } catch(e) {
+          p = Promise.reject(e);
+        }
+    
+        var timeout = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout')), testTimeout));
+        p = Promise.race([p, timeout]);
+    
+        p = p.catch(e => err = e);
+    
+        p.then(() => {
+          if(err) {
+            console.log(`Test error in '${t.testName || ''}': ${err.message}`);
+            if(err.assert) {
+              try {
+                console.log(JSON.stringify(err.assert));
+              } catch(e) {
+                console.log(err.assert);
+              }
+            }
+            throw err;
+          } else {
+            console.log('Test ok', t.testName || '');
+          }
+        });
+      }
+    
+      test('must error 1', () => da.assert(false));
+      test('must error 2', () => new Promise(() => da.assert(false)));
+      test('must error 3', () => new Promise((reject, resolve) => {true}));
     
 ### Implementation details
 
@@ -82,7 +99,7 @@ To get the call stack correct, to be able to report assert position, we throw an
         throw err;
       }
     
-      da.test('assert',()=>{
+      test('assert',()=>{
         try {
           da.assertEquals(1,2);
         } catch(e) {
@@ -169,7 +186,7 @@ in if above.
         return Array.prototype.slice.call(a, start, end);
       }
     
-      da.test('slice', () => {
+      test('slice', () => {
         da.assertEquals(slice([1,2,3]).length, 3);
         da.assertEquals(slice([1,2,3], 1)[1], 3);
         da.assertEquals(slice([1,2,3], 1 , 2).length, 1);
@@ -195,7 +212,7 @@ We wrap it in a function to pretend that we have a module loader.
         return module.exports;
       })();
     
-      da.test('sha256', ()=>{
+      test('sha256', ()=>{
         da.assertEquals(da.sha256(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
       });
     
@@ -203,7 +220,7 @@ We wrap it in a function to pretend that we have a module loader.
     
       da.sha224 = da.sha256.sha224;
     
-      da.test('sha224', ()=>{
+      test('sha224', ()=>{
         da.assertEquals(
             da.sha224('The quick brown fox jumps over the lazy dog'),
             '730e109bd7a8a32b1cb9d9a09aa2325d2430587ddbc0c38bad911525');
@@ -268,12 +285,12 @@ TODO handle iterables
         return false;
       }
     
-      da.test('equals', () => {
+      test('equals', () => {
         da.assert(da.equals({a:[1,2],b:3},{b:3,a:[1,2]}));
         da.assert(!da.equals({a:["1",2],b:3},{b:3,a:[1,2]}));
         da.assertEquals({a:[1,2],b:3},{b:3,a:[1,2]});
       });
-          
+    
 ## Message Passing
 
 ### TODO `handle(name, fn, opt)` 
@@ -326,6 +343,11 @@ Reaction:
 ### Implementation details    
 ## Done
 
+      if(typeof module === 'undefined') {
+        self.direape = da;
+      } else {
+        module.exports = da;
+      }
     })();
 # Old
 ## REUN - require(unpkg) 
