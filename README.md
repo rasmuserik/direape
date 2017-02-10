@@ -19,20 +19,83 @@ Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/
     
 ## Message Passing
 
-### TODO `handle(name, fn, opt)` 
+### `handle(name, fn, opt)` 
 
-- public if opt `{public:true}`, otherwise node only
+TODO: test
+    
+      var handlers = new Map();
+      var handlerOpts = new Map();
+    
+      da.handle = (name, fn, opt) => {
+        if(!fn) {
+          handlers.delete(name);
+          handlerOpts.delete(name);
+        }
+        handlers.set(name, fn);
+        handlerOpts.set(name, opt || {});
+      };
 
-### TODO `call(pid, name, args...)`
-### TODO `emit(pid, name, args...)`
-### TODO `pid`, `nid`
+### `emit(pid, name, args...)`
 
-pid = process-id
-`nid` node-id - process-id for main process
+TODO: test
+    
+      da.emit = function(pid, name) {
+        postMessage({
+          dstPid: pid,
+          dstName: name,
+          data: slice(arguments, 2)
+        });
+      };
+    
+### `call(pid, name, args...)`
+
+TODO: test
+    
+      da.call = function(pid, name) {
+        return new Promise((resolve, reject) =>
+            postMessage({
+              dstPid: pid,
+              dstName: name,
+              srcPid: da.pid,
+              srcName: makeCallbackHandler(resolve, reject),
+              data: slice(arguments, 2)
+            }));
+      };
+    
+### `pid`, `nid`
+
+`pid` is the process id and `nid` is the node id.
+
+These are set by parent thread, so if they are unset, it means that we are the node main thread.
+
+The pid is the hash of a random value. By remembering the random value, we can prove that we made the hash, - to protect against spoofing when  connecting to the server.
+    
+      var pidSecret;
+      if(!da.pid) {
+        pidSecret = Math.random();
+        da.pid = da.sha224(da._secret.toString());
+        da.nid = da.pid;
+      }
+    
 ### `isMainThread()`
     
       da.isMainThread = () => da.pid === da.nid;
     
+### TODO Implementation details
+- public if opt `{public:true}`, otherwise node only
+
+      function makeCallbackHandler(resolve, reject) { // TODO
+        return 'name';
+      }
+      var messageQueue = [];
+      function postMessage(msg) {
+        messageQueue.push(msg);
+        processMessagesAsync();
+      }
+      function processMessagesAsync() { // TODO
+      }
+
+TODO: main event dispatch loop
 ## Main thread functions (spawn, and network)
 
 ### TODO `online([boolean/url])` - sends message 'da:online' and 'da:offline'
