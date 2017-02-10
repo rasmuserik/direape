@@ -69,13 +69,17 @@
   // These are set by parent thread, so if they are unset, it means that we are the node main thread.
   //
   // The pid is the hash of a random value. By remembering the random value, we can prove that we made the hash, - to protect against spoofing when  connecting to the server.
+  //
 
   var pidSecret;
-  if(!da.pid) {
-    pidSecret = Math.random();
-    da.pid = da.sha224(da._secret.toString());
-    da.nid = da.pid;
-  }
+  setTimeout(() => {
+    if(!da.pid) {
+      pidSecret = Math.random();
+      da.pid = da.sha224(pidSecret.toString());
+      da.nid = da.pid;
+    }
+    pidReady();
+  }, 0);
 
   // ### `isMainThread()`
 
@@ -84,6 +88,8 @@
   // ### TODO Implementation details
   // - public if opt `{public:true}`, otherwise node only
   //
+  function pidReady() { // TODO
+  }
   function makeCallbackHandler(resolve, reject) { // TODO
     return 'name';
   }
