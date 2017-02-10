@@ -43,7 +43,7 @@
     postMessage({
       dstPid: pid,
       dstName: name,
-      data: slice(arguments, 2)
+      data: da.slice(arguments, 2)
     });
   };
 
@@ -58,7 +58,7 @@
           dstName: name,
           srcPid: da.pid,
           srcName: makeCallbackHandler(resolve, reject),
-          data: slice(arguments, 2)
+          data: da.slice(arguments, 2)
         }));
   };
 
@@ -224,21 +224,21 @@
 
   // ### `nextTick(fn)`
 
-  function nextTick(f) {
+  da.nextTick = (f) => {
     setTimeout(f, 0);
-  }
+  };
 
   // ### `slice(arr, i, j)`
   //
 
-  function slice(a, start, end) {
+  da.slice = (a, start, end) => {
     return Array.prototype.slice.call(a, start, end);
-  }
+  };
 
   test('slice', () => {
-    da.assertEquals(slice([1,2,3]).length, 3);
-    da.assertEquals(slice([1,2,3], 1)[1], 3);
-    da.assertEquals(slice([1,2,3], 1 , 2).length, 1);
+    da.assertEquals(da.slice([1,2,3]).length, 3);
+    da.assertEquals(da.slice([1,2,3], 1)[1], 3);
+    da.assertEquals(da.slice([1,2,3], 1 , 2).length, 1);
   });
 
   // ### `nextId()`
