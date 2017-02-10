@@ -237,7 +237,7 @@
           return false;
         }
       }
-      return true
+      return true;
     }
 
     if(a.constructor === Object) {
@@ -261,11 +261,11 @@
       return a.equals(b);
     }
     return false;
-  }
+  };
 
   test('equals', () => {
     da.assert(da.equals({a:[1,2],b:3},{b:3,a:[1,2]}));
-    da.assert(!da.equals({a:["1",2],b:3},{b:3,a:[1,2]}));
+    da.assert(!da.equals({a:['1',2],b:3},{b:3,a:[1,2]}));
     da.assertEquals({a:[1,2],b:3},{b:3,a:[1,2]});
   });
 
@@ -299,7 +299,7 @@
       tests = [];
     }
     tests.push(f);
-  };
+  }
 
   // ### `runTests(modules)`
   //
@@ -309,7 +309,7 @@
     for(var i = 0; i < tests.length; ++i) {
       runTest(tests[i]);
     }
-  }
+  };
 
   var testTimeout = 5000;
 
@@ -352,11 +352,11 @@
     });
   }
 
-  if(false) {
-    test('must error 1', () => da.assert(false));
-    test('must error 2', () => new Promise(() => da.assert(false)));
-    test('must error 3', () => new Promise((reject, resolve) => {true}));
-  }
+  /*
+     test('must error 1', () => da.assert(false));
+     test('must error 2', () => new Promise(() => da.assert(false)));
+     test('must error 3', () => new Promise((reject, resolve) => {true;}));
+     */
 
   // ### Implementation details
   //
