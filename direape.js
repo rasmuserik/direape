@@ -16,105 +16,56 @@
 // 
 (function() {
   var da = self.direape || {};
-  // ## Testing
-
-  // ### `assert(bool)`
-
-  da.assert = (ok) => ok || throwAssert({type: 'truthy', val: ok});
-
-  // ### `assertEquals(val1, val2)`
-
-  da.assertEquals = (val1, val2) => 
-    da.equals(val1, val2) || throwAssert({type: 'equals', vals: [val1, val2]});
-
-  // ### `test([name], fn)`
-  //
-  // TODO: keep track of which module tests belongs to
-
-  var tests = [];
-  da.test = test;
-  function test(name, f) {
-    if(!f) {
-      f = name; name= undefined;
-    }
-    f.testName = name;
-    tests.push(f);
-  };
-
-  // ### `runTests(modules)`
-  //
-  // TODO: only run desired modules
-
-  da.runTests = (modules) => { // TODO: run for named modules
-    for(var i = 0; i < tests.length; ++i) {
-      runTest(tests[i]);
-    }
-  }
-
-  var testTimeout = 5000;
-
-  function runTest(t) {
-    var err, p;
-
-    try {
-      p = Promise.resolve(t());
-    } catch(e) {
-      p = Promise.reject(e);
-    }
-
-    var timeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout')), testTimeout));
-    p = Promise.race([p, timeout]);
-
-    p = p.catch(e => err = e);
-
-    p.then(() => {
-      if(err) {
-        console.log(`Test error in '${t.testName || ''}': ${err.message}`);
-          if(err.assert) {
-            try {
-              console.log(JSON.stringify(err.assert));
-            } catch(e) {
-              console.log(err.assert);
-            }
-          }
-
-          if(err.stack) {
-            console.log(err.stack);
-          }
-
-          throw err;
-        } else {
-          console.log('Test ok', t.testName || '');
-        }
-      });
-    }
-
-    if(false) {
-       test('must error 1', () => da.assert(false));
-       test('must error 2', () => new Promise(() => da.assert(false)));
-       test('must error 3', () => new Promise((reject, resolve) => {true}));
-    }
-
-    // ### Implementation details
+    // ## Message Passing
     //
-    // To get the call stack correct, to be able to report assert position, we throw an `Error` (which includes the stack on many browsers), and enrich it with more information.
+    // ### TODO `handle(name, fn, opt)` 
+    //
+    // - public if opt `{public:true}`, otherwise node only
+    //
+    // ### TODO `call(pid, name, args...)`
+    // ### TODO `emit(pid, name, args...)`
+    // ### TODO `pid`, `nid`
+    //
+    // pid = process-id
+    // `nid` node-id - process-id for main process
+    // ### `isMainThread()`
 
-    function throwAssert(o) {
-      var err = new Error('AssertError');
-      err.assert = o;
-      throw err;
-    }
+    da.isMainThread = () => da.pid === da.nid;
 
-    test('assert',()=>{
-      try {
-        da.assertEquals(1,2);
-      } catch(e) {
-        da.assert(e.message === 'AssertError');
-        da.assert(typeof e.stack === 'string');
-      }
-    });
-
+    // ## Main thread functions (spawn, and network)
+    //
+    // ### TODO `online([boolean/url])` - sends message 'da:online' and 'da:offline'
+    // ### TODO `children()`
+    // ### TODO `spawn()`
+    // ### TODO `kill(child-id)`
+    // ## Reactive State
+    //
+    // ### TODO `setState(o)`
+    // ### TODO `getState()`
+    // ### TODO `reaction(f, params)` returns reaction, which when called returns result
+    // ### TODO `rerun(name, reaction)`
+    // ### Implementation details
+    // - dag, from a single source-input-reaction to a single drain-output-reaction.
+    //
+    // Reaction:
+    //
+    // - data
+    //     - uid
+    //     - exec-count (only increases when result changes)
+    //     - fn
+    //     - parameters
+    //     - result
+    //     - list of inputs (reactions accessed) from previous run, and their exec-count
+    //     - list of outputs (who have output as (grand-)child)
+    //  - code
+    //     - update children(recursively) on change
+    //     - get value (traverse undrained parents if no drain, and recalculate if needed)
+    //
+    // ## Module Loader
+    //
+    // ### TODO `require(module-name, [opt])`
+    // ### TODO `eval(str|fn, [opt])`
+    // ### Implementation details    
     // ## Utilities
     //
     // ### `GET(url)` 
@@ -321,56 +272,108 @@
     //
     // TODO should be used for better error reporting during testing, ie. line number of assert error
 
-    // ## Message Passing
-    //
-    // ### TODO `handle(name, fn, opt)` 
-    //
-    // - public if opt `{public:true}`, otherwise node only
-    //
-    // ### TODO `call(pid, name, args...)`
-    // ### TODO `emit(pid, name, args...)`
-    // ### TODO `pid`, `nid`
-    //
-    // pid = process-id
-    // `nid` node-id - process-id for main process
-    // ### `isMainThread()`
+  // ## Testing
 
-    da.isMainThread = () => da.pid === da.nid;
+  // ### `assert(bool)`
 
-    // ## Main thread functions (spawn, and network)
-    //
-    // ### TODO `online([boolean/url])` - sends message 'da:online' and 'da:offline'
-    // ### TODO `children()`
-    // ### TODO `spawn()`
-    // ### TODO `kill(child-id)`
-    // ## Reactive State
-    //
-    // ### TODO `setState(o)`
-    // ### TODO `getState()`
-    // ### TODO `reaction(f, params)` returns reaction, which when called returns result
-    // ### TODO `rerun(name, reaction)`
+  da.assert = (ok) => ok || throwAssert({type: 'truthy', val: ok});
+
+  // ### `assertEquals(val1, val2)`
+
+  da.assertEquals = (val1, val2) => 
+    da.equals(val1, val2) || throwAssert({type: 'equals', vals: [val1, val2]});
+
+  // ### `test([name], fn)`
+  //
+  // TODO: keep track of which module tests belongs to
+
+  var tests;
+  da.test = test;
+  function test(name, f) {
+    if(!f) {
+      f = name; name= undefined;
+    }
+    f.testName = name;
+    if(!tests) {
+      tests = [];
+    }
+    tests.push(f);
+  };
+
+  // ### `runTests(modules)`
+  //
+  // TODO: only run desired modules
+
+  da.runTests = (modules) => { // TODO: run for named modules
+    for(var i = 0; i < tests.length; ++i) {
+      runTest(tests[i]);
+    }
+  }
+
+  var testTimeout = 5000;
+
+  function runTest(t) {
+    var err, p;
+
+    try {
+      p = Promise.resolve(t());
+    } catch(e) {
+      p = Promise.reject(e);
+    }
+
+    var timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout')), testTimeout));
+    p = Promise.race([p, timeout]);
+
+    p = p.catch(e => err = e);
+
+    p.then(() => {
+      if(err) {
+        console.log(`Test error in '${t.testName || ''}': ${err.message}`);
+          if(err.assert) {
+            try {
+              console.log(JSON.stringify(err.assert));
+            } catch(e) {
+              console.log(err.assert);
+            }
+          }
+
+          if(err.stack) {
+            console.log(err.stack);
+          }
+
+          throw err;
+        } else {
+          console.log('Test ok', t.testName || '');
+        }
+      });
+    }
+
+    if(false) {
+       test('must error 1', () => da.assert(false));
+       test('must error 2', () => new Promise(() => da.assert(false)));
+       test('must error 3', () => new Promise((reject, resolve) => {true}));
+    }
+
     // ### Implementation details
-    // - dag, from a single source-input-reaction to a single drain-output-reaction.
     //
-    // Reaction:
-    //
-    // - data
-    //     - uid
-    //     - exec-count (only increases when result changes)
-    //     - fn
-    //     - parameters
-    //     - result
-    //     - list of inputs (reactions accessed) from previous run, and their exec-count
-    //     - list of outputs (who have output as (grand-)child)
-    //  - code
-    //     - update children(recursively) on change
-    //     - get value (traverse undrained parents if no drain, and recalculate if needed)
-    //
-    // ## Module Loader
-    //
-    // ### TODO `require(module-name, [opt])`
-    // ### TODO `eval(str|fn, [opt])`
-    // ### Implementation details    
+    // To get the call stack correct, to be able to report assert position, we throw an `Error` (which includes the stack on many browsers), and enrich it with more information.
+
+    function throwAssert(o) {
+      var err = new Error('AssertError');
+      err.assert = o;
+      throw err;
+    }
+
+    test('assert',()=>{
+      try {
+        da.assertEquals(1,2);
+      } catch(e) {
+        da.assert(e.message === 'AssertError');
+        da.assert(typeof e.stack === 'string');
+      }
+    });
+
     // ## Done
     //
     if(typeof module === 'undefined') {
