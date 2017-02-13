@@ -205,7 +205,7 @@
     if(da.isMainThread) {
       var child = children.get(msg.dstPid);
       if(child) {
-        child.postMessage(message);
+        child.postMessage(msg);
       } else {
         relayNetwork(msg);
       }

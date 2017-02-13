@@ -190,17 +190,38 @@ but later on, it will come in handy.
           .then(i => da.assertEquals(i, 81));
       });
     
-## Main thread functions (spawn, and network)
+## Workers
 
-### TODO `online([boolean/url])` - sends message 'da:online' and 'da:offline'
 ### TODO `children()`
 ### TODO `spawn()`
 ### TODO `kill(child-id)`
 ### TODO Implementation details
+    
+      var children = new Map();
 
 Send the message to ther processes. Only called if it shouldn't be handled by the process itself;
 
       function relay(msg) {
+        if(da.isMainThread) {
+          var child = children.get(msg.dstPid);
+          if(child) {
+            child.postMessage(msg);
+          } else {
+            relayNetwork(msg);
+          }
+        } else {
+          postMessage(msg);
+        }
+      }
+
+## Network
+
+### TODO `online([boolean/url])` - sends message 'da:online' and 'da:offline'
+### TODO Implementation details
+
+Send the message to ther processes. Only called if it shouldn't be handled by the process itself;
+
+      function relayNetwork(msg) {
       }
 
 ## Reactive State
@@ -251,9 +272,10 @@ Reaction:
     
 ## Utilities
 
-### `isNodeJS`
+### `isNodeJS`, `isMainThread`
 
-      da.isNodeJS = Boolean(((self.process || {}).versions || {}).node);
+      da.isNodeJS = !!((self.process || {}).versions || {}).node;
+      da.isMainThread = da.isNodeJS || !!self.document;
     
 ### `da.log(...)` `da.trace(...)`
 
@@ -598,9 +620,14 @@ To get the call stack correct, to be able to report assert position, we throw an
             .then(initModuleLoader)
             .then(() => {
               console.log('DireApe ready, pid:', da.pid);
-              if(self.DIREAPE_RUN_TESTS 
-                  || (da.isNodeJS && require.main === module && process.argv[2] === 'test')) { 
+              if(self.DIREAPE_RUN_TESTS) {
                 da.runTests();
+              }
+    
+              if(da.isNodeJS && require.main === module) {
+                if(process.argv.indexOf('test') !== -1) {
+                  da.runTests();
+                }
               }
             });
         });
