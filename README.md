@@ -12,7 +12,6 @@
 Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/gh/solsort/direape).
 
 # DireApe - Distributed Reactive App Environment
-# !!! UNDER MAJOR REWRITE !!!
 
     (function() {
       var da; setupModule();
@@ -234,7 +233,7 @@ but later on, it will come in handy.
     
         da.kill = (pid) => {
           children.get(pid).terminate();
-          children.remove(pid);
+          children.delete(pid);
         };
     
 ### Implementation details
@@ -283,13 +282,116 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
 
 ## Network
 
-### TODO `online([boolean/url])` - sends message 'da:online' and 'da:offline'
-### TODO Implementation details
+### `online([boolean/url])` - sends message 'da:online' and 'da:offline'
+      var websocket;
+    
+      function closeWebSocket() {
+          if(websocket) {
+            websocket.onerror = () => null;
+            websocket.close();
+          }
+      }
+      da.online = function(url) {
+        if(arguments.length === 0) {
+          return websocket && websocket.readyState === 1;
+        }
+        if(!url) {
+          return closeWebSocket();
+        }
+        if(url) {
+          closeWebSocket();
+          if(typeof url !== 'string') {
+            url = 'wss://direape.solsort.com';
+          }
+          return new Promise((resolve, reject) => {
+            websocket = new WebSocket(url);
+            websocket.onopen = () => {
+              websocket.send(JSON.stringify({direapeConnect: da.buf2ascii(publicKey)}));
+              resolve(true);
+            }
+            websocket.onerror = (e) => {
+              da.emit(da.pid, 'da:offline', e);
+              reject(e);
+            }
+            websocket.onmessage = o => {
+              var msg = o.data
+                msg = JSON.parse(msg);
+              msg.external = msg.external || true;
+              send(msg);
+            }
+          });
+        }
+      }
+    
+### Implementation details
 
 Send the message to ther processes. Only called if it shouldn't be handled by the process itself;
 
-      function relayNetwork(msg) {
+      if(isNodeJs()) {
+        var wsClients = new Map();
       }
+      function relayNetwork(msg) {
+        if(isNodeJs()) {
+          var dst = wsClients.get(msg.dstPid.slice(0,44));
+          console.log('relay', msg, wsClients.keys(), dst);
+          if(dst) {
+            console.log('relay send', msg);
+            dst.send(JSON.stringify(msg));
+          } 
+        } else {
+          if(websocket) {
+            websocket.send(JSON.stringify(msg));
+          }
+        }
+      }
+    
+      if(isNodeJs()) {
+        da.startServer = () => {
+          var app = require('express')();
+          app.use(require('express').static('.'));
+    
+          var server = require('http').createServer(app);
+    
+          var wss = new (require('ws').Server)({
+            perMessageDeflate: false,
+            server: server 
+          });
+    
+          wss.on('connection', (ws) => {
+            var nid;
+            ws.on('message', (msg) => {
+              msg = JSON.parse(msg);
+              if(msg.direapeConnect) {
+                if(nid) {
+                  wsClients.delete(nid);
+                }
+                nid = require('crypto')
+                  .createHash('sha256')
+                  .update(msg.direapeConnect)
+                  .digest('base64');
+                wsClients.set(nid, ws);
+              } else {
+                msg.external = nid;
+                if(msg.dstPid === 'server') {
+                  msg.dstPid = da.pid;
+                }
+                send(msg);
+              }
+            });
+            ws.on('close', () => {
+              if(nid) {
+                wsClients.delete(nid);
+              }
+            });
+          });
+    
+          server.listen(8888, () => console.log('started server on port 8888'));
+        }
+    
+        da.handle('server:list-clients', () => Array.from(wsClients.keys()), {public: true});
+      }
+    
+## Built-in Handlers
 
 ## Reactive State
 
@@ -609,15 +711,12 @@ TODO: keep track of which module tests belongs to
 TODO: only run desired modules
     
       var errors;
-      da.runTests = (modules) => { // TODO: run for named modules
+      da.runTests = (modules) =>  // TODO: run for named modules
         Promise
-          .all(tests.map(runTest))
-          .then(e => {
-            console.log('All tests ok:', tests.map(o => JSON.stringify(o.testName)).join(', '));
-            isNodeJs() && process.exit(0);
-          })
-          .catch(e => isNodeJs() && process.exit(-1));
-      };
+        .all(tests.map(runTest))
+        .then(e => {
+          console.log('All tests ok:', tests.map(o => JSON.stringify(o.testName)).join(', '));
+        });
     
       function runTest(t) {
         var err, p;
@@ -684,7 +783,7 @@ To get the call stack correct, to be able to report assert position, we throw an
         }
       });
     
-## Module Setup
+## Module Setup / Main
       function setupModule() {
         if(typeof self === 'undefined') {
           global.self = global;
@@ -720,7 +819,14 @@ To get the call stack correct, to be able to report assert position, we throw an
     
               if(isNodeJs() && require.main === module) {
                 if(process.argv.indexOf('test') !== -1) {
-                  da.runTests();
+                  da.runTests()
+                    .then(o => {
+                      if(process.argv.indexOf('server') !== -1) {
+                        da.startServer();
+                      } else {
+                        process.exit(0);
+                      }
+                    }).catch(e => process.exit(-1));
                 }
               }
             });
@@ -733,6 +839,21 @@ To get the call stack correct, to be able to report assert position, we throw an
         }
       }
     })();
+## License
+
+This software is copyrighted solsort.com ApS, and available under GPLv3, as well as proprietary license upon request.
+
+Versions older than 10 years also fall into the public domain.
+
+    
+<img src=https://direape.solsort.com/icon.png width=96 height=96 align=right>
+
+[![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/)
+[![github](https://img.shields.io/badge/github-solsort/direape-blue.svg)](https://github.com/solsort/direape)
+[![codeclimate](https://img.shields.io/codeclimate/github/solsort/direape.svg)](https://codeclimate.com/github/solsort/direape)
+[![travis](https://img.shields.io/travis/solsort/direape.svg)](https://travis-ci.org/solsort/direape)
+[![npm](https://img.shields.io/npm/v/direape.svg)](https://www.npmjs.com/package/direape)
+
 # Old
 ## REUN - require(unpkg)
 
@@ -1489,13 +1610,3 @@ console.log('started', da.pid);
     })();
     */
     
-## License
-
-This software is copyrighted solsort.com ApS, and available under GPLv3, as well as proprietary license upon request.
-
-Versions older than 10 years also fall into the public domain.
-
-## Future ideas
-
-- Make the library truely functional, ie. `da` will be a monadic state which also implements being a promise.
-- Add API for creating a cached reactive function.

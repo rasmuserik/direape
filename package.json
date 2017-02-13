@@ -18,6 +18,8 @@
   },
   "homepage": "http://direape.solsort.com",
   "dependencies": {
-    "request": "^2.79.0"
+    "express": "^4.14.1",
+    "request": "^2.79.0",
+    "ws": "^2.0.3"
   }
 }
