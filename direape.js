@@ -282,7 +282,7 @@
   //
   // ## Network
   //
-  // ### `online([boolean/url])` - sends message 'da:online' and 'da:offline'
+  // ### `online([boolean/url])`
   var websocket;
 
   function closeWebSocket() {
@@ -295,11 +295,10 @@
     if(arguments.length === 0) {
       return websocket && websocket.readyState === 1;
     }
-    if(!url) {
-      return closeWebSocket();
-    }
+
+    closeWebSocket();
+
     if(url) {
-      closeWebSocket();
       if(typeof url !== 'string') {
         url = 'wss://direape.solsort.com';
       }
@@ -310,7 +309,7 @@
           resolve(true);
         }
         websocket.onerror = (e) => {
-          da.emit(da.pid, 'da:offline', e);
+          da.emit(da.pid, 'da:socket-error', e);
           reject(e);
         }
         websocket.onmessage = o => {
