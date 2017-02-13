@@ -88,7 +88,9 @@ but later on, it will come in handy.
               .then(buf => btoa(da.buf2ascii(buf)))
               .then(base64 => da.pid = da.nid = base64)
               .catch(e => {
-                document.body.innerHTML = 'This app requires a browser that supports web cryptography.<br>This has been tested to work recent Chrome and Firefox.';
+                document.body.innerHTML = `
+                  This app requires a browser that supports web cryptography.<br>
+                  This has been tested to work recent Chrome and Firefox.`;
                 throw e;
               });
           }
@@ -427,7 +429,8 @@ Translate JavaScript objects JSON
       function jsonReplacer(o) {
         var jsonifyWhitelist = ['stack', 'name', 'message', 'id', 'class', 'value'];
     
-        if((typeof o !== 'object' && typeof o !== 'function') || o === null || Array.isArray(o) || o.constructor === Object) {
+        if((typeof o !== 'object' && typeof o !== 'function') || 
+            o === null || Array.isArray(o) || o.constructor === Object) {
           return o;
         }
         var result, k, i;
@@ -448,7 +451,8 @@ and apply is probably slow.
 Also handle Actual typed arrays,
 in if above.
 
-          result.base64 = self.btoa(String.fromCharCode.apply(null, new Uint8Array(o)));
+          result.base64 = self.btoa(
+              String.fromCharCode.apply(null, new Uint8Array(o)));
         }
         for(i = 0; i < jsonifyWhitelist.length; ++i) {
           k = jsonifyWhitelist[i] ;
