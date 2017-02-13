@@ -20,7 +20,7 @@
   if(self.location &&
       self.location.protocol === 'http:' &&
       location.hostname !== 'localhost') {
-    self.location.protocol = 'https:';
+    self.location.href = self.location.href.replace(/http/, 'https');
   }
 
   nextTick(() => {
