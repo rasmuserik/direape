@@ -245,13 +245,11 @@
 
   function initModuleLoader() {
     for(var i = 0; i < da.eval.initial.length; ++i) {
-      da.eval.apply(null, da.eval.initial[i]);
+      da_eval.apply(null, da.eval.initial[i]);
     }
     da.eval = da_eval;
   }
 
-  //
-  //
   // ## Utilities
   //
   // ### `da.log(...)` `da.trace(...)`

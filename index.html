@@ -39,6 +39,11 @@ reun.run(`
     </script>
     <script>DIREAPE_RUN_TESTS = true;</script>
     <script src=direape.js></script>
+    <script>
+direape.eval(() => {
+  app.innerHTML = 'DireApe running!<br>Pid:' + direape.pid;
+})
+    </script>
     <script>document.write('<script src="//incoming.solsort.com/log.js?' + location.protocol + '//' + location.host + location.pathname + location.search + '"></s' + 'cript>');</script>
   </body>
 </html>
