@@ -69,7 +69,7 @@
   var publicKey;
   function initPid() {
     if(!da.pid) {
-      if(!self.crypto && da.isNodeJS) {
+      if(!self.crypto && isNodeJs()) {
         publicKey = Math.random().toString(); // TODO
         da.pid = require('crypto')
           .createHash('sha256')
@@ -192,17 +192,61 @@
 
   // ## Workers
   //
-  // ### TODO `children()`
-  // ### TODO `spawn()`
-  // ### TODO `kill(child-id)`
-  // ### TODO Implementation details
+  if(isBrowser()) {
+    // ### `spawn()`
 
-  var children = new Map();
+    var children;
+    var direapeSource;
+
+    da.spawn = () => new Promise((resolve, reject) => {
+
+      var childPid = da.pid + Math.random().toString(36).slice(2,12);
+      da.log('child-pid',childPid);
+      var workerSource = `
+        self.direape = {
+          pid: '${childPid}', 
+          nid: '${da.pid}'
+        };
+      ` + direapeSource;
+
+      var workerSourceUrl = URL.createObjectURL(
+          new Blob([workerSource], {type:'application/javascript'}));
+
+      var child = new self.Worker(workerSourceUrl);
+      console.log(child);
+
+      children.set(childPid, child);
+
+      child.onmessage = (o) => {
+        child.onmessage = (o) => send(o.data);
+        URL.revokeObjectURL(workerSourceUrl);
+        resolve(childPid);
+      };
+    });
+
+    // ### `children()`
+
+    da.children = () => children.keys();
+
+    // ### `kill(child-id)`
+
+    da.kill = (pid) => {
+      children.get(pid).terminate();
+      children.remove(pid);
+    };
+
+    // ### Implementation details
+
+    children = new Map();
+
+  }
   //
   // Send the message to ther processes. Only called if it shouldn't be handled by the process itself;
   //
   function relay(msg) {
-    if(da.isMainThread) {
+    if(isWorker()) {
+      self.postMessage(msg);
+    } else if(isBrowser()) {
       var child = children.get(msg.dstPid);
       if(child) {
         child.postMessage(msg);
@@ -210,9 +254,30 @@
         relayNetwork(msg);
       }
     } else {
-      postMessage(msg);
+      relayNetwork(msg);
     }
   }
+
+  function initWorker() {
+    if(isWorker()) {
+      self.onmessage = (o) => send(o.data);
+      self.postMessage({});
+    } else {
+      return da.GET('./direape.js')
+        .then(src => direapeSource = src);
+
+    }
+  }
+
+  if(isBrowser()) {
+    test('workers', () => {
+      return da.spawn()
+        .then(childPid => da.log('childPid', childPid))
+        .then(childPid => da.call(childPid, 'hello'))
+        .catch(e => da.log('err:', e));
+    });
+  }
+
   //
   // ## Network
   //
@@ -274,8 +339,24 @@
   //
   // ### `isNodeJS`, `isMainThread`
   //
-  da.isNodeJS = !!((self.process || {}).versions || {}).node;
-  da.isMainThread = da.isNodeJS || !!self.document;
+  da.isNodeJs = isNodeJs;
+  function isNodeJs() {
+    return !!((self.process || {}).versions || {}).node;
+  }
+  da.isNodeJs = isNodeJs;
+
+  da.isBrowser = isBrowser;
+  function isBrowser() {
+    return !!(self.window);
+  }
+  da.isMainThread = isMainThread;
+  function isMainThread() {
+    return !isWorker;
+  }
+  da.isWorker = isWorker;
+  function isWorker() {
+    return !!self.postMessage && self.postMessage.length === 1;
+  }
 
   // ### `da.log(...)` `da.trace(...)`
   //
@@ -302,9 +383,14 @@
       xhr.send();
     });
   } else {
-    da.GET = (url) => new Promise((resolve, reject) =>
-        require('request')(url, (err, res, body) =>
-          err || res.statusCode !== 200 ? reject(err) : resolve(body)));
+    da.GET = (url) => new Promise((resolve, reject) => {
+      if(url[0] === '.') {
+        resolve(require('fs').readFileSync(url));
+      } else {
+        return require('request')(url, (err, res, body) =>
+            err || res.statusCode !== 200 ? reject(err) : resolve(body));
+      }
+    });
   }
   test('GET ok', () => da.GET('https://unpkg.com/direape'));
   test('GET fail', () => da.GET('https://unpkg.com/direape/notfound')
@@ -522,8 +608,8 @@
   da.runTests = (modules) => { // TODO: run for named modules
     Promise
       .all(tests.map(runTest))
-      .then(e => da.isNodeJS && process.exit(0))
-      .catch(e => da.isNodeJS && process.exit(-1));
+      .then(e => isNodeJs() && process.exit(0))
+      .catch(e => isNodeJs() && process.exit(-1));
   };
 
   function runTest(t) {
@@ -617,6 +703,7 @@
     nextTick(() =>  {
       Promise
         .resolve(initPid())
+        .then(initWorker)
         .then(initModuleLoader)
         .then(() => {
           console.log('DireApe ready, pid:', da.pid);
@@ -624,7 +711,7 @@
             da.runTests();
           }
 
-          if(da.isNodeJS && require.main === module) {
+          if(isNodeJs() && require.main === module) {
             if(process.argv.indexOf('test') !== -1) {
               da.runTests();
             }
@@ -634,6 +721,9 @@
   }
 
   function installShims() {
+    if(!self.URL) {
+      self.URL = self.webkitURL;
+    }
   }
 })();
 // # Old
