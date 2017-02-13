@@ -17,6 +17,12 @@
 (function() {
   var da = self.direape || {};
 
+  if(self.location &&
+      self.location.protocol === 'http:' &&
+      location.hostname !== 'localhost') {
+    self.location.protocol = 'https:';
+  }
+
   nextTick(() => {
     Promise
       .resolve(initPid())
