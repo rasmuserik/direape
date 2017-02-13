@@ -612,7 +612,10 @@ TODO: only run desired modules
       da.runTests = (modules) => { // TODO: run for named modules
         Promise
           .all(tests.map(runTest))
-          .then(e => isNodeJs() && process.exit(0))
+          .then(e => {
+            console.log('All tests ok:', tests.map(o => JSON.stringify(o.testName)).join(', '));
+            isNodeJs() && process.exit(0);
+          })
           .catch(e => isNodeJs() && process.exit(-1));
       };
     
@@ -650,7 +653,7 @@ TODO: only run desired modules
     
             throw err;
           } else {
-            console.log('Test ok', t.testName || '');
+     console.log('Test ok', t.testName || '');
           }
         });
         return p;
