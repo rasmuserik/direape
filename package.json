@@ -3,7 +3,9 @@
   "version": "0.2.0",
   "description": "Distributed Reactive App Environment",
   "main": "direape.js",
-  "scripts": { "test": "true" },
+  "scripts": {
+    "test": "node direape.js test"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/solsort/direape"
@@ -14,5 +16,8 @@
   "bugs": {
     "url": "https://github.com/solsort/direape/issues"
   },
-  "homepage": "http://direape.solsort.com"
+  "homepage": "http://direape.solsort.com",
+  "dependencies": {
+    "request": "^2.79.0"
+  }
 }

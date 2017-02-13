@@ -15,25 +15,7 @@ Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/
 # !!! UNDER MAJOR REWRITE !!!
 
     (function() {
-      var da = self.direape || {};
-    
-      if(self.location &&
-          self.location.protocol === 'http:' &&
-          location.hostname !== 'localhost') {
-        self.location.protocol = 'https:';
-      }
-    
-      nextTick(() => {
-        Promise
-          .resolve(initPid())
-          .then(initModuleLoader)
-          .then(() => {
-            console.log('DireApe ready, pid:', da.pid);
-            if(self.DIREAPE_RUN_TESTS) {
-              da.runTests();
-            }
-          });
-      });
+      var da; setupModule();
     
 ## Message Passing
 
@@ -87,18 +69,29 @@ but later on, it will come in handy.
       var publicKey;
       function initPid() {
         if(!da.pid) {
-          return da.pid || Promise.resolve()
-            .then(() => self.crypto.subtle ||
-                (self.crypto.subtle = self.crypto.webkitSubtle))
-            .then(() => self.crypto.subtle.generateKey(
-                  {name: 'ECDSA', namedCurve: 'P-521'},
-                  true, ['sign', 'verify']))
-            .then(key => self.crypto.subtle.exportKey('spki', key.publicKey))
-            .then(spki => publicKey = spki)
-            .then(buf => self.crypto.subtle.digest('SHA-256', buf))
-            .then(da.buf2base64url)
-            .then(base64 => da.pid = da.nid = base64)
-            .catch(e => document.body.innerHTML = 'This app requires a browser that supports web cryptography.<br>This has been tested to work recent Chrome and Firefox.');
+          if(!self.crypto && da.isNodeJS) {
+            publicKey = Math.random().toString(); // TODO
+            da.pid = require('crypto')
+              .createHash('sha256')
+              .update(publicKey)
+              .digest('base64');
+          } else {
+            return da.pid || Promise.resolve()
+              .then(() => self.crypto.subtle ||
+                  (self.crypto.subtle = self.crypto.webkitSubtle))
+              .then(() => self.crypto.subtle.generateKey(
+                    {name: 'ECDSA', namedCurve: 'P-521'},
+                    true, ['sign', 'verify']))
+              .then(key => self.crypto.subtle.exportKey('spki', key.publicKey))
+              .then(spki => publicKey = spki)
+              .then(buf => self.crypto.subtle.digest('SHA-256', buf))
+              .then(buf => btoa(da.buf2ascii(buf)))
+              .then(base64 => da.pid = da.nid = base64)
+              .catch(e => {
+                document.body.innerHTML = 'This app requires a browser that supports web cryptography.<br>This has been tested to work recent Chrome and Firefox.';
+                throw e;
+              });
+          }
         }
       }
     
@@ -258,6 +251,10 @@ Reaction:
     
 ## Utilities
 
+### `isNodeJS`
+
+      da.isNodeJS = Boolean(((self.process || {}).versions || {}).node);
+    
 ### `da.log(...)` `da.trace(...)`
 
       da.log = function(msg, o) {
@@ -270,8 +267,8 @@ Reaction:
 
 TODO: make it work with unpkg(cross-origin) in webworkers (through making request in main thread).
     
-      da.GET = function urlGet(url) {
-        return new Promise(function(resolve, reject) {
+      if(self.XMLHttpRequest) {
+        da.GET = (url) => new Promise((resolve, reject) => {
           var xhr = new XMLHttpRequest();
           xhr.open('GET', url);
           xhr.onreadystatechange = () =>
@@ -282,7 +279,11 @@ TODO: make it work with unpkg(cross-origin) in webworkers (through making reques
               : reject(xhr));
           xhr.send();
         });
-      };
+      } else {
+        da.GET = (url) => new Promise((resolve, reject) =>
+            require('request')(url, (err, res, body) =>
+              err || res.statusCode !== 200 ? reject(err) : resolve(body)));
+      }
       test('GET ok', () => da.GET('https://unpkg.com/direape'));
       test('GET fail', () => da.GET('https://unpkg.com/direape/notfound')
           .catch(() => 'error')
@@ -376,10 +377,8 @@ in if above.
       da.nextId = () => ++prevId;
     
 
-### `buf2ascii(buf)`, `ascii2buf(str)`, `ascii2base64url(str)`, base64url2ascii(str)`, `buf2base64url(buf)`, `base64url2buf(str)`
+### `buf2ascii(buf)`, `ascii2buf(str)`
 
-Url-safe base64 encoding of buffers,
-see Table 2 of <https://www.ietf.org/rfc/rfc4648.txt>
     
       da.buf2ascii = (buf) =>
         Array.from(new Uint8Array(buf))
@@ -391,14 +390,6 @@ see Table 2 of <https://www.ietf.org/rfc/rfc4648.txt>
         }
         return result.buffer;
       };
-    
-      da.ascii2base64url = (str) =>
-        btoa(str).replace('+', '-').replace('/', '_').replace('=','');
-      da.base64url2ascii = (str) =>
-        atob(str.replace('_', '/').replace('-', '+'));
-    
-      da.buf2base64url = (buf) => da.ascii2base64url(da.buf2ascii(buf));
-      da.base64url2buf = (str) => da.ascii2buf(da.base64url2ascii(str));
     
       test('buffer conversion', () => {
         da.assertEquals(da.buf2ascii(Uint8Array.from([104,105]).buffer), 'hi');
@@ -505,10 +496,12 @@ TODO: keep track of which module tests belongs to
 
 TODO: only run desired modules
     
+      var errors;
       da.runTests = (modules) => { // TODO: run for named modules
-        for(var i = 0; i < tests.length; ++i) {
-          runTest(tests[i]);
-        }
+        Promise
+          .all(tests.map(runTest))
+          .then(e => da.isNodeJS && process.exit(0))
+          .catch(e => da.isNodeJS && process.exit(-1));
       };
     
       function runTest(t) {
@@ -526,7 +519,7 @@ TODO: only run desired modules
     
         p = p.catch(e => err = e);
     
-        p.then(() => {
+        p = p.then(() => {
           if(err) {
             console.log('Test error in "' +
                 (t.testName || '') +
@@ -548,6 +541,7 @@ TODO: only run desired modules
             console.log('Test ok', t.testName || '');
           }
         });
+        return p;
       }
     
       /*
@@ -575,12 +569,44 @@ To get the call stack correct, to be able to report assert position, we throw an
         }
       });
     
-## Done
-
-      if(typeof module === 'undefined') {
-        self.direape = da;
-      } else {
-        module.exports = da;
+## Module Setup
+      function setupModule() {
+        if(typeof self === 'undefined') {
+          global.self = global;
+        }
+    
+        if(self.location &&
+            self.location.protocol === 'http:' &&
+            location.hostname !== 'localhost') {
+          self.location.href = self.location.href.replace(/http/, 'https');
+        }
+    
+        da = self.direape || {};
+    
+        installShims();
+    
+    
+        if(typeof module === 'undefined') {
+          self.direape = da;
+        } else {
+          module.exports = da;
+        }
+    
+        nextTick(() =>  {
+          Promise
+            .resolve(initPid())
+            .then(initModuleLoader)
+            .then(() => {
+              console.log('DireApe ready, pid:', da.pid);
+              if(self.DIREAPE_RUN_TESTS 
+                  || (da.isNodeJS && require.main === module && process.argv[2] === 'test')) { 
+                da.runTests();
+              }
+            });
+        });
+      }
+    
+      function installShims() {
       }
     })();
 # Old
