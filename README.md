@@ -1,7 +1,7 @@
-<img src=https://reun.solsort.com/icon.png width=96 height=96 align=right> 
+<img src=https://reun.solsort.com/icon.png width=96 height=96 align=right>
 <img src=https://direape.solsort.com/icon.png width=96 height=96 align=right>
 
-[![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/) 
+[![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/)
 [![github](https://img.shields.io/badge/github-solsort/direape-blue.svg)](https://github.com/solsort/direape)
 [![codeclimate](https://img.shields.io/codeclimate/github/solsort/direape.svg)](https://codeclimate.com/github/solsort/direape)
 [![travis](https://img.shields.io/travis/solsort/direape.svg)](https://travis-ci.org/solsort/direape)
@@ -17,22 +17,29 @@ Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/
     (function() {
       var da = self.direape || {};
     
+      nextTick(() => {
+        Promise
+          .resolve(initPid())
+          .then(initModuleLoader)
+          .then(() => {
+            console.log('DireApe ready, pid:', da.pid);
+            if(self.DIREAPE_RUN_TESTS) {
+              da.runTests();
+            }
+          });
+      });
+    
 ## Message Passing
 
-### `handle(name, fn, opt)` 
+### `handle(name, fn, opt)`
 
-TODO: test
-    
-      var handlers = new Map();
-      var handlerOpts = new Map();
+      var handlers;
     
       da.handle = (name, fn, opt) => {
         if(!fn) {
           handlers.delete(name);
-          handlerOpts.delete(name);
         }
-        handlers.set(name, fn);
-        handlerOpts.set(name, opt || {});
+        handlers.set(name, Object.assign(opt || {}, {fn:fn}));
       };
 
 ### `emit(pid, name, args...)`
@@ -40,7 +47,7 @@ TODO: test
 TODO: test
     
       da.emit = function(pid, name) {
-        postMessage({
+        send({
           dstPid: pid,
           dstName: name,
           data: da.slice(arguments, 2)
@@ -49,11 +56,9 @@ TODO: test
     
 ### `call(pid, name, args...)`
 
-TODO: test
-    
       da.call = function(pid, name) {
         return new Promise((resolve, reject) =>
-            postMessage({
+            send({
               dstPid: pid,
               dstName: name,
               srcPid: da.pid,
@@ -68,46 +73,137 @@ TODO: test
 
 These are set by parent thread, so if they are unset, it means that we are the node main thread.
 
-The pid is the hash of a random value. By remembering the random value, we can prove that we made the hash, - to protect against spoofing when  connecting to the server.
+The pid is the hash of the public key for the node.
 
+We do not use the keys for identity yet,
+but later on, it will come in handy.
     
-      var pidSecret;
-      setTimeout(() => {
+      var publicKey;
+      function initPid() {
         if(!da.pid) {
-          pidSecret = Math.random();
-          da.pid = da.sha224(pidSecret.toString());
-          da.nid = da.pid;
+          return da.pid || Promise.resolve()
+            .then(() => self.crypto.subtle ||
+                (self.crypto.subtle = self.crypto.webkitSubtle))
+            .then(() => self.crypto.subtle.generateKey(
+                  {name: 'ECDSA', namedCurve: 'P-521'},
+                  true, ['sign', 'verify']))
+            .then(key => self.crypto.subtle.exportKey('spki', key.publicKey))
+            .then(spki => publicKey = spki)
+            .then(buf => self.crypto.subtle.digest('SHA-256', buf))
+            .then(da.buf2base64url)
+            .then(base64 => da.pid = da.nid = base64)
+            .catch(e => document.body.innerHTML = 'This app requires a browser that supports web cryptography.<br>This has been tested to work recent Chrome and Firefox.');
         }
-        pidReady();
-      }, 0);
+      }
     
 ### `isMainThread()`
     
       da.isMainThread = () => da.pid === da.nid;
     
-### TODO Implementation details
-- public if opt `{public:true}`, otherwise node only
+### Implementation details
 
-      function pidReady() { // TODO
-      }
-      function makeCallbackHandler(resolve, reject) { // TODO
-        return 'name';
-      }
       var messageQueue = [];
-      function postMessage(msg) {
+      var postmanScheduled = false;
+      var callTimeout = 10000;
+      handlers = new Map();
+    
+      function makeCallbackHandler(resolve, reject) {
+        var name = 'callback' + Math.random().toString().slice(2);
+        var timeout = setTimeout(
+            () => handler(null, 'call timeout'),
+            callTimeout);
+    
+        function handler(result, error) {
+          clearTimeout(timeout);
+          da.handle(name, null);
+          if(error) {
+            reject(error);
+          } else {
+            resolve(result);
+          }
+        }
+    
+        da.handle(name, handler, {public: true});
+        return name;
+      }
+    
+      function send(msg) {
         messageQueue.push(msg);
-        processMessagesAsync();
+        schedulePostman();
       }
-      function processMessagesAsync() { // TODO
+    
+      function schedulePostman() {
+        if(!postmanScheduled) {
+          da.nextTick(postman);
+          postmanScheduled = true;
+        }
       }
-
-TODO: main event dispatch loop
+    
+      function postman() {
+        postmanScheduled = false;
+        var messages = messageQueue;
+        messageQueue = [];
+        for(var i = 0; i < messages.length; ++i) {
+          processMessage(messages[i]);
+        }
+      }
+    
+      function processMessage(msg) {
+        if(msg.dstPid === da.pid) {
+          processLocalMessage(msg);
+        } else {
+          relay(msg);
+        }
+      }
+    
+      function processLocalMessage(msg) {
+        var result;
+        var handler = handlers.get(msg.dstName) || {};
+    
+        if(msg.external && ! handler.public) {
+          return sendReply(msg, [null, 'no such public function']);
+        }
+    
+        var fn = handler.fn;
+        if(!fn) {
+          console.log('no such function:', msg.dstName);
+          return sendReply(msg, [null, 'no such function']);
+        }
+    
+        Promise.resolve(fn.apply(msg, msg.data))
+          .then(result => sendReply(msg, [result]))
+          .catch(e => sendReply(msg, [null, e]));
+      }
+    
+      function sendReply(msg, data) {
+        if(msg.srcPid !== undefined && msg.srcName !== undefined) {
+          send({
+            dstPid: msg.srcPid,
+            dstName: msg.srcName,
+            data: data
+          });
+        }
+      }
+    
+      test('message passing', () => {
+        da.handle('da:square', i => i*i);
+        return da.call(da.pid, 'da:square', 9)
+          .then(i => da.assertEquals(i, 81));
+      });
+    
 ## Main thread functions (spawn, and network)
 
 ### TODO `online([boolean/url])` - sends message 'da:online' and 'da:offline'
 ### TODO `children()`
 ### TODO `spawn()`
 ### TODO `kill(child-id)`
+### TODO Implementation details
+
+Send the message to ther processes. Only called if it shouldn't be handled by the process itself;
+
+      function relay(msg) {
+      }
+
 ## Reactive State
 
 ### TODO `setState(o)`
@@ -135,10 +231,38 @@ Reaction:
 
 ### TODO `require(module-name, [opt])`
 ### TODO `eval(str|fn, [opt])`
-### Implementation details    
+
+    
+      function da_eval(f, opt) { // TODO
+        f();
+      }
+    
+
+### Implementation details
+    
+      da.eval = (f, opt) => da.eval.initial.push([f, opt]);
+      da.eval.initial = [];
+    
+      function initModuleLoader() {
+        for(var i = 0; i < da.eval.initial.length; ++i) {
+          da.eval.apply(null, da.eval.initial[i]);
+        }
+        da.eval = da_eval;
+      }
+    
+
+
 ## Utilities
 
-### `GET(url)` 
+### `da.log(...)` `da.trace(...)`
+
+      da.log = function(msg, o) {
+        console.log.apply(console, arguments);
+        return o;
+      };
+      da.trace = da.log;
+
+### `GET(url)`
 
 TODO: make it work with unpkg(cross-origin) in webworkers (through making request in main thread).
     
@@ -147,9 +271,9 @@ TODO: make it work with unpkg(cross-origin) in webworkers (through making reques
           var xhr = new XMLHttpRequest();
           xhr.open('GET', url);
           xhr.onreadystatechange = () =>
-            xhr.readyState === 4 && 
-            ( ( xhr.status === 200 
-                && typeof xhr.responseText === 'string') 
+            xhr.readyState === 4 &&
+            ( ( xhr.status === 200
+                && typeof xhr.responseText === 'string')
               ? resolve(xhr.responseText)
               : reject(xhr));
           xhr.send();
@@ -165,7 +289,7 @@ TODO: make it work with unpkg(cross-origin) in webworkers (through making reques
 Translate JavaScript objects JSON
 
     
-      da.jsonify = o => 
+      da.jsonify = o =>
         JSON.parse(JSON.stringify([o], (k,v) => jsonReplacer(v)))[0];
     
       test('jsonify', () => {
@@ -206,10 +330,10 @@ Translate JavaScript objects JSON
         }
         if(o instanceof ArrayBuffer) {
 
-TODO btoa does not work in arraybuffer, 
+TODO btoa does not work in arraybuffer,
 and apply is probably slow.
 Also handle Actual typed arrays,
-in if above. 
+in if above.
 
           result.base64 = self.btoa(String.fromCharCode.apply(null, new Uint8Array(o)));
         }
@@ -224,9 +348,10 @@ in if above.
     
 ### `nextTick(fn)`
     
-      da.nextTick = (f) => {
+      da.nextTick = nextTick;
+      function nextTick(f) {
         setTimeout(f, 0);
-      };
+      }
     
 ### `slice(arr, i, j)`
 
@@ -247,34 +372,34 @@ in if above.
       da.nextId = () => ++prevId;
     
 
-### `sha256(str)`
+### `buf2ascii(buf)`, `ascii2buf(str)`, `ascii2base64url(str)`, base64url2ascii(str)`, `buf2base64url(buf)`, `base64url2buf(str)`
 
-Just an inline copy/loading of js-sha256 npm module.
-We wrap it in a function to pretend that we have a module loader.
+Url-safe base64 encoding of buffers,
+see Table 2 of <https://www.ietf.org/rfc/rfc4648.txt>
     
-      da.sha256 = (function() {
-        var module = {exports: {}};
-        /*eslint-disable */
-        /* [js-sha256]{@link https://github.com/emn178/js-sha256} @version 0.5.0 @author Chen, Yi-Cyuan [emn178@gmail.com] @copyright Chen, Yi-Cyuan 2014-2017 @license MIT */
-        !function(){"use strict";function t(t,h){h?(c[0]=c[16]=c[1]=c[2]=c[3]=c[4]=c[5]=c[6]=c[7]=c[8]=c[9]=c[10]=c[11]=c[12]=c[13]=c[14]=c[15]=0,this.blocks=c):this.blocks=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],t?(this.h0=3238371032,this.h1=914150663,this.h2=812702999,this.h3=4144912697,this.h4=4290775857,this.h5=1750603025,this.h6=1694076839,this.h7=3204075428):(this.h0=1779033703,this.h1=3144134277,this.h2=1013904242,this.h3=2773480762,this.h4=1359893119,this.h5=2600822924,this.h6=528734635,this.h7=1541459225),this.block=this.start=this.bytes=0,this.finalized=this.hashed=!1,this.first=!0,this.is224=t}var h="object"==typeof window?window:{},i=!h.JS_SHA256_NO_NODE_JS&&"object"==typeof process&&process.versions&&process.versions.node;i&&(h=global);var s=!h.JS_SHA256_NO_COMMON_JS&&"object"==typeof module&&module.exports,e="function"==typeof define&&define.amd,r="undefined"!=typeof ArrayBuffer,n="0123456789abcdef".split(""),o=[-2147483648,8388608,32768,128],a=[24,16,8,0],f=[1116352408,1899447441,3049323471,3921009573,961987163,1508970993,2453635748,2870763221,3624381080,310598401,607225278,1426881987,1925078388,2162078206,2614888103,3248222580,3835390401,4022224774,264347078,604807628,770255983,1249150122,1555081692,1996064986,2554220882,2821834349,2952996808,3210313671,3336571891,3584528711,113926993,338241895,666307205,773529912,1294757372,1396182291,1695183700,1986661051,2177026350,2456956037,2730485921,2820302411,3259730800,3345764771,3516065817,3600352804,4094571909,275423344,430227734,506948616,659060556,883997877,958139571,1322822218,1537002063,1747873779,1955562222,2024104815,2227730452,2361852424,2428436474,2756734187,3204031479,3329325298],u=["hex","array","digest","arrayBuffer"],c=[],p=function(h,i){return function(s){return new t(i,!0).update(s)[h]()}},d=function(h){var s=p("hex",h);i&&(s=y(s,h)),s.create=function(){return new t(h)},s.update=function(t){return s.create().update(t)};for(var e=0;e<u.length;++e){var r=u[e];s[r]=p(r,h)}return s},y=function(t,h){var i=require("crypto"),s=require("buffer").Buffer,e=h?"sha224":"sha256",n=function(h){if("string"==typeof h)return i.createHash(e).update(h,"utf8").digest("hex");if(r&&h instanceof ArrayBuffer)h=new Uint8Array(h);else if(void 0===h.length)return t(h);return i.createHash(e).update(new s(h)).digest("hex")};return n};t.prototype.update=function(t){if(!this.finalized){var i="string"!=typeof t;i&&r&&t instanceof h.ArrayBuffer&&(t=new Uint8Array(t));for(var s,e,n=0,o=t.length||0,f=this.blocks;o>n;){if(this.hashed&&(this.hashed=!1,f[0]=this.block,f[16]=f[1]=f[2]=f[3]=f[4]=f[5]=f[6]=f[7]=f[8]=f[9]=f[10]=f[11]=f[12]=f[13]=f[14]=f[15]=0),i)for(e=this.start;o>n&&64>e;++n)f[e>>2]|=t[n]<<a[3&e++];else for(e=this.start;o>n&&64>e;++n)s=t.charCodeAt(n),128>s?f[e>>2]|=s<<a[3&e++]:2048>s?(f[e>>2]|=(192|s>>6)<<a[3&e++],f[e>>2]|=(128|63&s)<<a[3&e++]):55296>s||s>=57344?(f[e>>2]|=(224|s>>12)<<a[3&e++],f[e>>2]|=(128|s>>6&63)<<a[3&e++],f[e>>2]|=(128|63&s)<<a[3&e++]):(s=65536+((1023&s)<<10|1023&t.charCodeAt(++n)),f[e>>2]|=(240|s>>18)<<a[3&e++],f[e>>2]|=(128|s>>12&63)<<a[3&e++],f[e>>2]|=(128|s>>6&63)<<a[3&e++],f[e>>2]|=(128|63&s)<<a[3&e++]);this.lastByteIndex=e,this.bytes+=e-this.start,e>=64?(this.block=f[16],this.start=e-64,this.hash(),this.hashed=!0):this.start=e}return this}},t.prototype.finalize=function(){if(!this.finalized){this.finalized=!0;var t=this.blocks,h=this.lastByteIndex;t[16]=this.block,t[h>>2]|=o[3&h],this.block=t[16],h>=56&&(this.hashed||this.hash(),t[0]=this.block,t[16]=t[1]=t[2]=t[3]=t[4]=t[5]=t[6]=t[7]=t[8]=t[9]=t[10]=t[11]=t[12]=t[13]=t[14]=t[15]=0),t[15]=this.bytes<<3,this.hash()}},t.prototype.hash=function(){var t,h,i,s,e,r,n,o,a,u,c,p=this.h0,d=this.h1,y=this.h2,l=this.h3,b=this.h4,v=this.h5,g=this.h6,w=this.h7,k=this.blocks;for(t=16;64>t;++t)e=k[t-15],h=(e>>>7|e<<25)^(e>>>18|e<<14)^e>>>3,e=k[t-2],i=(e>>>17|e<<15)^(e>>>19|e<<13)^e>>>10,k[t]=k[t-16]+h+k[t-7]+i<<0;for(c=d&y,t=0;64>t;t+=4)this.first?(this.is224?(o=300032,e=k[0]-1413257819,w=e-150054599<<0,l=e+24177077<<0):(o=704751109,e=k[0]-210244248,w=e-1521486534<<0,l=e+143694565<<0),this.first=!1):(h=(p>>>2|p<<30)^(p>>>13|p<<19)^(p>>>22|p<<10),i=(b>>>6|b<<26)^(b>>>11|b<<21)^(b>>>25|b<<7),o=p&d,s=o^p&y^c,n=b&v^~b&g,e=w+i+n+f[t]+k[t],r=h+s,w=l+e<<0,l=e+r<<0),h=(l>>>2|l<<30)^(l>>>13|l<<19)^(l>>>22|l<<10),i=(w>>>6|w<<26)^(w>>>11|w<<21)^(w>>>25|w<<7),a=l&p,s=a^l&d^o,n=w&b^~w&v,e=g+i+n+f[t+1]+k[t+1],r=h+s,g=y+e<<0,y=e+r<<0,h=(y>>>2|y<<30)^(y>>>13|y<<19)^(y>>>22|y<<10),i=(g>>>6|g<<26)^(g>>>11|g<<21)^(g>>>25|g<<7),u=y&l,s=u^y&p^a,n=g&w^~g&b,e=v+i+n+f[t+2]+k[t+2],r=h+s,v=d+e<<0,d=e+r<<0,h=(d>>>2|d<<30)^(d>>>13|d<<19)^(d>>>22|d<<10),i=(v>>>6|v<<26)^(v>>>11|v<<21)^(v>>>25|v<<7),c=d&y,s=c^d&l^u,n=v&g^~v&w,e=b+i+n+f[t+3]+k[t+3],r=h+s,b=p+e<<0,p=e+r<<0;this.h0=this.h0+p<<0,this.h1=this.h1+d<<0,this.h2=this.h2+y<<0,this.h3=this.h3+l<<0,this.h4=this.h4+b<<0,this.h5=this.h5+v<<0,this.h6=this.h6+g<<0,this.h7=this.h7+w<<0},t.prototype.hex=function(){this.finalize();var t=this.h0,h=this.h1,i=this.h2,s=this.h3,e=this.h4,r=this.h5,o=this.h6,a=this.h7,f=n[t>>28&15]+n[t>>24&15]+n[t>>20&15]+n[t>>16&15]+n[t>>12&15]+n[t>>8&15]+n[t>>4&15]+n[15&t]+n[h>>28&15]+n[h>>24&15]+n[h>>20&15]+n[h>>16&15]+n[h>>12&15]+n[h>>8&15]+n[h>>4&15]+n[15&h]+n[i>>28&15]+n[i>>24&15]+n[i>>20&15]+n[i>>16&15]+n[i>>12&15]+n[i>>8&15]+n[i>>4&15]+n[15&i]+n[s>>28&15]+n[s>>24&15]+n[s>>20&15]+n[s>>16&15]+n[s>>12&15]+n[s>>8&15]+n[s>>4&15]+n[15&s]+n[e>>28&15]+n[e>>24&15]+n[e>>20&15]+n[e>>16&15]+n[e>>12&15]+n[e>>8&15]+n[e>>4&15]+n[15&e]+n[r>>28&15]+n[r>>24&15]+n[r>>20&15]+n[r>>16&15]+n[r>>12&15]+n[r>>8&15]+n[r>>4&15]+n[15&r]+n[o>>28&15]+n[o>>24&15]+n[o>>20&15]+n[o>>16&15]+n[o>>12&15]+n[o>>8&15]+n[o>>4&15]+n[15&o];return this.is224||(f+=n[a>>28&15]+n[a>>24&15]+n[a>>20&15]+n[a>>16&15]+n[a>>12&15]+n[a>>8&15]+n[a>>4&15]+n[15&a]),f},t.prototype.toString=t.prototype.hex,t.prototype.digest=function(){this.finalize();var t=this.h0,h=this.h1,i=this.h2,s=this.h3,e=this.h4,r=this.h5,n=this.h6,o=this.h7,a=[t>>24&255,t>>16&255,t>>8&255,255&t,h>>24&255,h>>16&255,h>>8&255,255&h,i>>24&255,i>>16&255,i>>8&255,255&i,s>>24&255,s>>16&255,s>>8&255,255&s,e>>24&255,e>>16&255,e>>8&255,255&e,r>>24&255,r>>16&255,r>>8&255,255&r,n>>24&255,n>>16&255,n>>8&255,255&n];return this.is224||a.push(o>>24&255,o>>16&255,o>>8&255,255&o),a},t.prototype.array=t.prototype.digest,t.prototype.arrayBuffer=function(){this.finalize();var t=new ArrayBuffer(this.is224?28:32),h=new DataView(t);return h.setUint32(0,this.h0),h.setUint32(4,this.h1),h.setUint32(8,this.h2),h.setUint32(12,this.h3),h.setUint32(16,this.h4),h.setUint32(20,this.h5),h.setUint32(24,this.h6),this.is224||h.setUint32(28,this.h7),t};var l=d();l.sha256=l,l.sha224=d(!0),s?module.exports=l:(h.sha256=l.sha256,h.sha224=l.sha224,e&&define(function(){return l}))}();
-        /*eslint-enable */
-        return module.exports;
-      })();
+      da.buf2ascii = (buf) =>
+        Array.from(new Uint8Array(buf))
+        .map(i => String.fromCharCode(i)).join('');
+      da.ascii2buf = (str) => {
+        var result = new Uint8Array(str.length);
+        for(var i = 0; i < str.length; ++i) {
+          result[i] = str.charCodeAt(i);
+        }
+        return result.buffer;
+      };
     
-      test('sha256', ()=>{
-        da.assertEquals(da.sha256(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+      da.ascii2base64url = (str) =>
+        btoa(str).replace('+', '-').replace('/', '_').replace('=','');
+      da.base64url2ascii = (str) =>
+        atob(str.replace('_', '/').replace('-', '+'));
+    
+      da.buf2base64url = (buf) => da.ascii2base64url(da.buf2ascii(buf));
+      da.base64url2buf = (str) => da.ascii2buf(da.base64url2ascii(str));
+    
+      test('buffer conversion', () => {
+        da.assertEquals(da.buf2ascii(Uint8Array.from([104,105]).buffer), 'hi');
+        da.assertEquals(da.buf2ascii(da.ascii2buf('hi')), 'hi');
       });
-    
-### `sha224(str)`
-    
-      da.sha224 = da.sha256.sha224;
-    
-      test('sha224', ()=>{
-        da.assertEquals(
-            da.sha224('The quick brown fox jumps over the lazy dog'),
-            '730e109bd7a8a32b1cb9d9a09aa2325d2430587ddbc0c38bad911525');
-      });
-    
     
 ### `equals(a,b)`
 
@@ -313,7 +438,7 @@ TODO handle iterables
           if(b.constructor !== Object) {
             return false;
           }
-          if(!da.equals( 
+          if(!da.equals(
                 Object.keys(a).sort(),
                 Object.keys(b).sort())) {
             return false;
@@ -344,13 +469,15 @@ TODO should be used for better error reporting during testing, ie. line number o
     
 ## Testing
     
+      var testTimeout = 5000;
+    
 ### `assert(bool)`
     
       da.assert = (ok) => ok || throwAssert({type: 'truthy', val: ok});
     
 ### `assertEquals(val1, val2)`
     
-      da.assertEquals = (val1, val2) => 
+      da.assertEquals = (val1, val2) =>
         da.equals(val1, val2) || throwAssert({type: 'equals', vals: [val1, val2]});
     
 ### `test([name], fn)`
@@ -380,8 +507,6 @@ TODO: only run desired modules
         }
       };
     
-      var testTimeout = 5000;
-    
       function runTest(t) {
         var err, p;
     
@@ -391,7 +516,7 @@ TODO: only run desired modules
           p = Promise.reject(e);
         }
     
-        var timeout = new Promise((_, reject) => 
+        var timeout = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Timeout')), testTimeout));
         p = Promise.race([p, timeout]);
     
@@ -455,7 +580,7 @@ To get the call stack correct, to be able to report assert position, we throw an
       }
     })();
 # Old
-## REUN - require(unpkg) 
+## REUN - require(unpkg)
 
     /*
 
@@ -540,8 +665,8 @@ Http(s) get utility function, as `fetch` is not generally available yet.
     
 When trying to load at module, that is not loaded yet, we throw this error:
 
-    function RequireError(module, url) { 
-      this.module = module; 
+    function RequireError(module, url) {
+      this.module = module;
       this.url = url;
     }
     RequireError.prototype.toString = function() {
@@ -562,7 +687,7 @@ path is baseurl used for mapping relative file paths (`./hello.js`) to url.
       }
       path = path.replace(/[?#].*.?/, '');
       path = (module.startsWith('.')
-          ? path.replace(/[/][^/]*$/, '/')  
+          ? path.replace(/[/][^/]*$/, '/')
           : 'https://unpkg.com/');
       path = path + module;
       while(path.indexOf('/./') !== -1) {
@@ -589,7 +714,7 @@ path is baseurl used for mapping relative file paths (`./hello.js`) to url.
         var url = moduleUrl(uri, module);
         if(!modules[url]) {
           throw new RequireError(module, url);
-        } 
+        }
         return modules[url];
       };
       if(typeof code === 'string') {
@@ -660,7 +785,7 @@ returns the already loaded module.
       if(self.module && self.module.require) {
         return Promise.resolve(require(name));
       }
-      return doEval('module.exports = require(\'' + name + '\');', 
+      return doEval('module.exports = require(\'' + name + '\');',
           {uri: self.location && self.location.href || './'});
     }
     
@@ -679,7 +804,7 @@ Versions older than 10 years also fall into the public domain.
     
 <img src=https://direape.solsort.com/icon.png width=96 height=96 align=right>
 
-[![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/) 
+[![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/)
 [![github](https://img.shields.io/badge/github-solsort/direape-blue.svg)](https://github.com/solsort/direape)
 [![codeclimate](https://img.shields.io/codeclimate/github/solsort/direape.svg)](https://codeclimate.com/github/solsort/direape)
 [![travis](https://img.shields.io/travis/solsort/direape.svg)](https://travis-ci.org/solsort/direape)
@@ -761,7 +886,7 @@ TODO: consider refactoring `handlers` to be a Map instead of an Object, - as we 
 console.log('call', arguments);
         var params = slice(arguments, 2);
         return new Promise((resolve, reject) => {
-          send({dstPid: pid, dstName: name, 
+          send({dstPid: pid, dstName: name,
             srcPid: da.pid,
             srcName: callbackHandler((val, err) => {
 console.log('got-result', name, val, err);
@@ -790,8 +915,8 @@ TODO: extend the api to make immutable value available. For example like `da.get
 
 Making a change may also trigger/schedule reaction to run later.
     
-      da.setJS = (path, value) => { 
-        state = setJS(state, path, value); 
+      da.setJS = (path, value) => {
+        state = setJS(state, path, value);
         reschedule();
       };
     
@@ -818,10 +943,10 @@ When the new worker is created, we send back and forth the pids, so the parent/c
     
       da.spawn = () => new Promise((resolve, reject) => {
         var childPid = 'PID' + randomString();
-        var workerSourceUrl = 
+        var workerSourceUrl =
           (self.URL || self.webkitURL).createObjectURL(new Blob([`
                 importScripts('https://unpkg.com/reun');
-                reun.urlGet = function(url) { 
+                reun.urlGet = function(url) {
                   return new Promise((resolve, reject) => {
                     self.postMessage(url);
                     self.onmessage = o => {
@@ -874,14 +999,14 @@ setIn/getIn
     
 TODO: make `reun:run` result serialisable, currently we just discard it
     
-                da.handle('da:eval', (src, opt) => 
+                da.handle('da:eval', (src, opt) =>
                     reun.eval(src, opt).then(o => jsonify(o)));
     
-                da.handle('da:subscribe', (path, opt) => 
+                da.handle('da:subscribe', (path, opt) =>
                     jsonify(da.reaction(`da:subscribe ${path} -> ${opt.name}@${opt.pid}`,
                         () => da.run(opt.pid, opt.name, path, da.getJS(path)))));
     
-                da.handle('da:unsubscribe', (path, opt) => 
+                da.handle('da:unsubscribe', (path, opt) =>
                     da.reaction(`da:subscribe ${path} -> ${opt.name}@${opt.pid}`));
 TODO:
 
@@ -909,7 +1034,7 @@ The state is kept JSON-compatible, and thus we create Map/Object or List/Array d
 TODO: better error handling, ie handle wrong types, i.e. setting a number in an object or vice versa
     
                 function setJS(o, path, value) {
-                  if(path.length) { // TODO: check that we are in handler, or else throw 
+                  if(path.length) { // TODO: check that we are in handler, or else throw
                     var key = path[0];
                     var rest = path.slice(1);
                     if(!o) {
@@ -935,7 +1060,7 @@ TODO: better error handling, ie handle wrong types, i.e. setting a number in an 
     
 ### make reaction
 
-The reactions object is used to keep track of which of the handlers that are reactions. 
+The reactions object is used to keep track of which of the handlers that are reactions.
 
 makeReaction, keeps track of whether a function is actually a reaction.
 
@@ -948,7 +1073,7 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
                     if(da._handlers[name] !== reaction) {
                       delete reactions[name];
                       return;
-                    } 
+                    }
                     var prevAccessHistory = accessHistory;
                     accessHistory = new Set();
                     try {
@@ -1013,10 +1138,10 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
                 function sendResponse(msg, params) {
                   if(msg.srcPid && msg.srcName) {
                     send({
-                      dstPid: msg.srcPid, 
-                      dstName: msg.srcName, 
+                      dstPid: msg.srcPid,
+                      dstName: msg.srcName,
                       params: params});
-                  } 
+                  }
                 }
     
 #### dispatch all messages in the message queue and run reactions
@@ -1047,11 +1172,11 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
                       prev = prevState.getIn(path);
                       current = state.getIn(path);
                       if (prev !== current) {
-                        if ((prev instanceof immutable.Map || 
+                        if ((prev instanceof immutable.Map ||
                               prev instanceof immutable.List)
                             && prev.equals(current)){
                           continue;
-                        } 
+                        }
                         changed = true;
                         break;
                       }
@@ -1074,7 +1199,7 @@ TODO: think through whether there might be a bug: when a reaction is overwritten
                     }
                     Promise
                       .resolve(da._handlers[msg.dstName].apply(null, msg.params))
-                      .then(o => sendResponse(msg, [o]), 
+                      .then(o => sendResponse(msg, [o]),
                           e => sendResponse(msg, [null, jsonify(e)]));
                   } catch(e) {
                     sendResponse(msg, [null, jsonify(e)]);
@@ -1095,8 +1220,8 @@ TODO extract common code to common core library
                   return JSON.parse(JSON.stringify([o], (k,v) => jsonReplacer(v)))[0];
                 }
     
-                var jsonifyWhitelist = 
-                  ['stack', 'name', 'message', 
+                var jsonifyWhitelist =
+                  ['stack', 'name', 'message',
                 'id', 'class', 'value'
                   ];
     
@@ -1117,10 +1242,10 @@ TODO extract common code to common core library
                   }
                   if(o instanceof ArrayBuffer) {
 
-TODO btoa does not work in arraybuffer, 
+TODO btoa does not work in arraybuffer,
 and apply is probably slow.
 Also handle Actual typed arrays,
-in if above. 
+in if above.
 
                     result.base64 = self.btoa(String.fromCharCode.apply(null, new Uint8Array(o)));
                   }
@@ -1178,8 +1303,8 @@ console.log('started', da.pid);
                   da.spawn().then(child => {
                     da.handle('log', function () { console.log('log', arguments); });
                     da.call(child, 'da:subscribe', ['hi'], {pid: da.pid, name: 'log'});
-                    da.call(child, 'da:eval', 
-                        'require("http://localhost:8080/direape.js").setJS(["hi"], "here");', 
+                    da.call(child, 'da:eval',
+                        'require("http://localhost:8080/direape.js").setJS(["hi"], "here");',
                         'http://localhost:8080/')
                       .then(result => console.log('result', result))
                       .then(() => da.call(child, 'da:getIn', ['hi'], 123))
