@@ -197,14 +197,14 @@
   // ### TODO `kill(child-id)`
   // ### TODO Implementation details
 
-  var children = Object.Map();
+  var children = new Map();
   //
   // Send the message to ther processes. Only called if it shouldn't be handled by the process itself;
   //
   function relay(msg) {
     if(da.isMainThread) {
       var child = children.get(msg.dstPid);
-      if(child)
+      if(child) {
         child.postMessage(message);
       } else {
         relayNetwork(msg);
@@ -275,7 +275,7 @@
   // ### `isNodeJS`, `isMainThread`
   //
   da.isNodeJS = !!((self.process || {}).versions || {}).node;
-  da.isMainThread = isNodeJs || !!self.document;
+  da.isMainThread = da.isNodeJS || !!self.document;
 
   // ### `da.log(...)` `da.trace(...)`
   //
