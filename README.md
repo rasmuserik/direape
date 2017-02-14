@@ -419,11 +419,11 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
     
         da.handle('da:GET', da.GET);
     
-## `da:status ()`
+### `da:status ()`
     
         da.handle('da:status', () => ({pid: da.pid, time: Date.now()}), {public: true});
     
-## `da:children ()`
+### `da:children ()`
     
         if(!isBrowser()) {
           da.handle('da:children', da.children);
