@@ -696,12 +696,12 @@
       if(!Array.isArray(modules)) {
         modules = [modules];
       }
-      ts.filter(t => modules.some(m => t.testName.startsWith(m + ':')));
+      ts = ts.filter(t => modules.some(m => t.testName.startsWith(m + ':')));
     }
     return Promise
-      .all(tests.map(runTest))
+      .all(ts.map(runTest))
       .then(e => {
-        console.log('All tests ok:', tests.map(o => JSON.stringify(o.testName)).join(', '));
+        console.log('All tests ok:', ts.map(o => JSON.stringify(o.testName)).join(', '));
       });
   };
 
