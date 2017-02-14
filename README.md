@@ -761,6 +761,7 @@ To get the call stack correct, to be able to report assert position, we throw an
       function setupModule() {
     
 Shims
+    
         if(typeof self === 'undefined') {
           global.self = global;
         }
@@ -803,6 +804,7 @@ Initialisation, of the different parts of direape
         });
     
 Main entry
+    
       da.ready(() => {
         if(self.DIREAPE_RUN_TESTS) {
           da.runTests();

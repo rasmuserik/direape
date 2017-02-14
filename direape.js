@@ -761,6 +761,7 @@
   function setupModule() {
 
     // Shims
+
     if(typeof self === 'undefined') {
       global.self = global;
     }
@@ -803,6 +804,7 @@
     });
 
   // Main entry
+
   da.ready(() => {
     if(self.DIREAPE_RUN_TESTS) {
       da.runTests();
