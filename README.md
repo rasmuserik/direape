@@ -662,15 +662,23 @@ TODO handle iterables
       da.assertEquals = (val1, val2) =>
         da.equals(val1, val2) || throwAssert({type: 'equals', vals: [val1, val2]});
     
-### `test([name], fn)`
+### `testSuite(name)`
 
-TODO: keep track of which module tests belongs to
+Sets the current test suite name
+    
+      var currentTestSuite;
+      da.testSuite = testSuite;
+      function testSuite(str) {
+        currentTestSuite = str;
+      }
+      
+### `test(name, fn)`
     
       var tests;
       da.test = test;
       function test(name, f) {
-        if(!f) {
-          f = name; name= undefined;
+        if(currentTestSuite) {
+          name = currentTestSuite + ':' + name;
         }
         f.testName = name;
         if(!tests) {
@@ -680,16 +688,24 @@ TODO: keep track of which module tests belongs to
       }
     
 ### `runTests(modules)`
-
-TODO: only run desired modules
     
       var errors;
-      da.runTests = (modules) =>  // TODO: run for named modules
-        Promise
-        .all(tests.map(runTest))
-        .then(e => {
-          console.log('All tests ok:', tests.map(o => JSON.stringify(o.testName)).join(', '));
-        });
+      da.runTests = (modules) => {
+        var ts = tests;
+        if(modules) {
+          if(!Array.isArray(modules)) {
+            modules = [modules];
+          }
+          ts.filter(t => modules.some(m => t.testName.startsWith(m + ':')));
+        }
+        return Promise
+          .all(tests.map(runTest))
+          .then(e => {
+            console.log('All tests ok:', tests.map(o => JSON.stringify(o.testName)).join(', '));
+          });
+      };
+    
+### Implementation details
     
       function runTest(t) {
         var err, p;
@@ -737,8 +753,6 @@ TODO: only run desired modules
          test('must error 3', () => new Promise((reject, resolve) => {true;}));
          */
     
-### Implementation details
-
 To get the call stack correct, to be able to report assert position, we throw an `Error` (which includes the stack on many browsers), and enrich it with more information.
     
       function throwAssert(o) {
@@ -759,6 +773,11 @@ To get the call stack correct, to be able to report assert position, we throw an
 ## Module Setup / Main
     
       function setupModule() {
+    
+Define name of testsuite
+    
+        testSuite('direape');
+    
     
 Shims
     
@@ -805,6 +824,7 @@ Initialisation, of the different parts of direape
     
 Main entry
     
+      testSuite('');
       da.ready(() => {
         if(self.DIREAPE_RUN_TESTS) {
           da.runTests();
@@ -812,7 +832,7 @@ Main entry
     
         if(isNodeJs() && require.main === module) {
           if(process.argv.indexOf('test') !== -1) {
-            da.runTests()
+            da.runTests('direape')
               .then(o => {
                 if(process.argv.indexOf('server') !== -1) {
                   da.startServer();
