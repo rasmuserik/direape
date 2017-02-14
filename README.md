@@ -386,12 +386,15 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
     
           server.listen(8888, () => console.log('started server on port 8888'));
         }
-    
-        da.handle('server:list-clients', () => Array.from(wsClients.keys()), {public: true});
       }
     
 ## Built-in Handlers
 
+      function initHandlers() {
+        da.handle('da:list-clients', () => Array.from(wsClients.keys()), {public: true});
+        da.handle('da:url-get', da.GET);
+        da.handle('da:eval', (src, opt) => da.eval);
+      }
 ## Reactive State
 
 ### TODO `setState(o)`
@@ -808,6 +811,7 @@ To get the call stack correct, to be able to report assert position, we throw an
         nextTick(() =>  {
           Promise
             .resolve(initPid())
+            .then(initHandlers)
             .then(initWorker)
             .then(initModuleLoader)
             .then(() => {
