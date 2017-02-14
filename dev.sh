@@ -11,7 +11,7 @@ while inotifywait -e modify,close_write,move_self -q *.js
 do 
   kill `cat .pid`
   sleep 0.1
-  node direape.js test server $@ &
+  DIREAPE_DEV=true node direape.js test server $@ &
   echo $! > .pid
   sleep 3
 done

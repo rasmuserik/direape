@@ -1,10 +1,10 @@
 {
   "name": "direape",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Distributed Reactive App Environment",
   "main": "direape.js",
   "scripts": {
-    "test": "node direape.js test"
+    "test": "DIREAPE_DEV=true node direape.js test"
   },
   "repository": {
     "type": "git",
