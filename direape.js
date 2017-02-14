@@ -8,6 +8,8 @@
 //
 // # DireApe - Distributed Reactive App Environment
 //
+// Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/gh/solsort/direape).
+//
 (function() {
   var da; setupModule();
 

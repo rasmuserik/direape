@@ -8,6 +8,8 @@
 
 # DireApe - Distributed Reactive App Environment
 
+Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/gh/solsort/direape).
+
     (function() {
       var da; setupModule();
     
@@ -239,9 +241,9 @@ but later on, it will come in handy.
         children = new Map();
     
       }
-
+    
 Send the message to ther processes. Only called if it shouldn't be handled by the process itself;
-
+    
       function relay(msg) {
         if(isWorker()) {
           self.postMessage(msg);
@@ -262,24 +264,16 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
           self.onmessage = (o) => send(o.data);
           self.postMessage({});
         } else {
-    
-    
-          /*
-             TODO uncomment when direape@0.2.1, and reun@0.2 is up and running
-    
-TODO DIREAPE_DEV environment, loading './direape.js' instead.
-    
           var reunRequest = da.GET('https://unpkg.com/reun@0.2');
-          return da.GET('https://unpkg.com/direape@0.2')
-          .then(src => direapeSource = src)
-          .then(() => reunRequest)
-          .then(reun => direapeSource += reun);
-    
-          */
-          return da.GET('./direape.js').then(src => direapeSource = src);
-    
-    
+          return da.GET(isDev() ? './direape.js' : 'https://unpkg.com/direape@0.2')
+            .then(src => direapeSource = src)
+            .then(() => reunRequest)
+            .then(reun => direapeSource += reun);
         }
+      }
+    
+      function isDev() {
+        return isNodeJs() ? process.env.DIREAPE_DEV : location.hostname === 'localhost';
       }
     
       if(isBrowser()) {
