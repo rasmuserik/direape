@@ -273,7 +273,7 @@
   }
 
   function isDev() {
-    return isNodeJs() ? process.env.DIREAPE_DEV : location.hostname === 'localhost';
+    return isNodeJs() ? process.env.DIREAPE_DEV : da.global.DIREAPE_DEV;
   }
 
   if(isBrowser()) {

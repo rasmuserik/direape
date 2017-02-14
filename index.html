@@ -37,7 +37,10 @@ reun.run(`
  xhr.open('GET', './README.md'); xhr.send();
     `,location.href);
     </script>
-    <script>DIREAPE_RUN_TESTS = true;</script>
+    <script>
+DIREAPE_RUN_TESTS = true;
+DIREAPE_DEV = true;
+    </script>
     <script src=direape.js></script>
     <script>
 direape.ready(() => {
