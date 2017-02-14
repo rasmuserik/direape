@@ -358,7 +358,7 @@
     }
   }
 
-  // ### WebSocket NodeJS Message Relay Server
+  // ### Server: nodejs websocket server that relays messages
 
   if(isNodeJs()) {
     da.startServer = () => {
@@ -407,9 +407,24 @@
   // ## Built-in Handlers
 
   function initHandlers() {
-    da.handle('da:list-clients', () => Array.from(wsClients.keys()), {public: true});
+
+    // ### `da:list-clients ()`
+    //
+    
+    if(isNodeJs()) {
+      da.handle('da:list-clients', () => Array.from(wsClients.keys()), {public: true});
+    }
+
+    // ### `da:get (url)`
+
     da.handle('da:GET', da.GET);
+
+    // ## `da:status ()`
+
     da.handle('da:status', () => ({pid: da.pid, time: Date.now()}), {public: true});
+
+    // ## `da:children ()`
+
     if(!isBrowser()) {
       da.handle('da:children', da.children);
     }
