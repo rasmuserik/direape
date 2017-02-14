@@ -431,6 +431,12 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
       }
 ## Utilities
 
+### global
+
+global is called `global` in nodejs, `window` in browser, and `self` in webworker (and browser)...
+    
+      da.global = self;
+    
 ### `ready(fn)`
 
       var waiting = [];
