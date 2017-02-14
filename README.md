@@ -1,4 +1,3 @@
-<img src=https://reun.solsort.com/icon.png width=96 height=96 align=right>
 <img src=https://direape.solsort.com/icon.png width=96 height=96 align=right>
 
 [![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/)
@@ -6,10 +5,6 @@
 [![codeclimate](https://img.shields.io/codeclimate/github/solsort/direape.svg)](https://codeclimate.com/github/solsort/direape)
 [![travis](https://img.shields.io/travis/solsort/direape.svg)](https://travis-ci.org/solsort/direape)
 [![npm](https://img.shields.io/npm/v/direape.svg)](https://www.npmjs.com/package/direape)
-
-# !!! UNDER MAJOR REWRITE !!!
-
-Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/gh/solsort/direape).
 
 # DireApe - Distributed Reactive App Environment
 
@@ -95,10 +90,6 @@ but later on, it will come in handy.
           }
         }
       }
-    
-### `isMainThread()`
-    
-      da.isMainThread = () => da.pid === da.nid;
     
 ### Implementation details
 
@@ -193,8 +184,16 @@ but later on, it will come in handy.
     
 ## Workers
 
-      if(isBrowser()) {
+### `isWorker()`
+    
+      da.isWorker = isWorker;
+      function isWorker() {
+        return !!self.postMessage && self.postMessage.length === 1;
+      }
+    
 ### `spawn()`
+    
+      if(isBrowser()) {
     
         var children;
         var direapeSource;
@@ -202,10 +201,9 @@ but later on, it will come in handy.
         da.spawn = () => new Promise((resolve, reject) => {
     
           var childPid = da.pid + Math.random().toString(36).slice(2,12);
-          da.log('child-pid',childPid);
           var workerSource = `
             self.direape = {
-              pid: '${childPid}', 
+              pid: '${childPid}',
               nid: '${da.pid}'
             };
           ` + direapeSource;
@@ -264,71 +262,93 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
           self.onmessage = (o) => send(o.data);
           self.postMessage({});
         } else {
-          return da.GET('./direape.js')
-            .then(src => direapeSource = src);
+    
+    
+          /*
+             TODO uncomment when direape@0.2.1, and reun@0.2 is up and running
+    
+TODO DIREAPE_DEV environment, loading './direape.js' instead.
+    
+          var reunRequest = da.GET('https://unpkg.com/reun@0.2');
+          return da.GET('https://unpkg.com/direape@0.2')
+          .then(src => direapeSource = src)
+          .then(() => reunRequest)
+          .then(reun => direapeSource += reun);
+    
+          */
+          return da.GET('./direape.js').then(src => direapeSource = src);
+    
     
         }
       }
     
       if(isBrowser()) {
         test('workers', () => {
+          var childPid;
           return da.spawn()
-            .then(childPid => da.log('childPid', childPid))
-            .then(childPid => da.call(childPid, 'hello'))
-            .catch(e => da.log('err:', e));
+            .then(pid => childPid = pid)
+            .then(() => da.call(childPid, 'da:status'))
+            .then(o => da.assertEquals(o.pid, childPid));
         });
       }
     
-
 ## Network
 
 ### `online([boolean/url])`
-      var websocket;
+
+TODO: automatic reconnect
     
-      function closeWebSocket() {
-          if(websocket) {
-            websocket.onerror = () => null;
-            websocket.close();
+      if(isBrowser()) {
+    
+        var websocket;
+    
+        da.online = function(url) {
+          if(arguments.length === 0) {
+            return websocket && websocket.readyState === 1;
           }
-      }
-      da.online = function(url) {
-        if(arguments.length === 0) {
-          return websocket && websocket.readyState === 1;
-        }
     
-        closeWebSocket();
+          closeWebSocket();
     
-        if(url) {
-          if(typeof url !== 'string') {
-            url = 'wss://direape.solsort.com';
-          }
-          return new Promise((resolve, reject) => {
-            websocket = new WebSocket(url);
-            websocket.onopen = () => {
-              websocket.send(JSON.stringify({direapeConnect: da.buf2ascii(publicKey)}));
-              resolve(true);
+          if(url) {
+            if(typeof url !== 'string') {
+              url = 'wss://direape.solsort.com';
             }
-            websocket.onerror = (e) => {
-              da.emit(da.pid, 'da:socket-error', e);
-              reject(e);
-            }
-            websocket.onmessage = o => {
-              var msg = o.data
+            return new Promise((resolve, reject) => {
+              websocket = new WebSocket(url);
+              websocket.onopen = () => {
+                websocket.send(JSON.stringify({direapeConnect: da.buf2ascii(publicKey)}));
+                resolve(true);
+              };
+              websocket.onerror = (e) => {
+                da.emit(da.pid, 'da:socket-error', e);
+                reject(e);
+              };
+              websocket.onmessage = o => {
+                var msg = o.data;
                 msg = JSON.parse(msg);
-              msg.external = msg.external || true;
-              send(msg);
-            }
-          });
-        }
+                msg.external = msg.external || true;
+                send(msg);
+              };
+            });
+          }
+        };
       }
     
 ### Implementation details
 
 Send the message to ther processes. Only called if it shouldn't be handled by the process itself;
-
+    
       if(isNodeJs()) {
         var wsClients = new Map();
       }
+    
+      function closeWebSocket() {
+        if(websocket) {
+          websocket.onerror = () => null;
+          websocket.close();
+        }
+      }
+    
       function relayNetwork(msg) {
         if(isNodeJs()) {
           var dst = wsClients.get(msg.dstPid.slice(0,44));
@@ -336,13 +356,15 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
           if(dst) {
             console.log('relay send', msg);
             dst.send(JSON.stringify(msg));
-          } 
+          }
         } else {
           if(websocket) {
             websocket.send(JSON.stringify(msg));
           }
         }
       }
+    
+### WebSocket NodeJS Message Relay Server
     
       if(isNodeJs()) {
         da.startServer = () => {
@@ -353,7 +375,7 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
     
           var wss = new (require('ws').Server)({
             perMessageDeflate: false,
-            server: server 
+            server: server
           });
     
           wss.on('connection', (ws) => {
@@ -385,83 +407,42 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
           });
     
           server.listen(8888, () => console.log('started server on port 8888'));
-        }
+        };
       }
     
 ## Built-in Handlers
-
+    
       function initHandlers() {
         da.handle('da:list-clients', () => Array.from(wsClients.keys()), {public: true});
         da.handle('da:GET', da.GET);
-        da.handle('da:eval', (src, opt) => da.eval);
-      }
-## Reactive State
-
-### TODO `setState(o)`
-### TODO `getState()`
-### TODO `reaction(f, params)` returns reaction, which when called returns result
-### TODO `rerun(name, reaction)`
-### Implementation details
-- dag, from a single source-input-reaction to a single drain-output-reaction.
-
-Reaction:
-
-- data
-    - uid
-    - exec-count (only increases when result changes)
-    - fn
-    - parameters
-    - result
-    - list of inputs (reactions accessed) from previous run, and their exec-count
-    - list of outputs (who have output as (grand-)child)
- - code
-    - update children(recursively) on change
-    - get value (traverse undrained parents if no drain, and recalculate if needed)
-
-## Module Loader
-
-### TODO `require(module-name, [opt])`
-### TODO `eval(str|fn, [opt])`
-
-    
-      function da_eval(f, opt) { // TODO
-        f();
-      }
-    
-
-### Implementation details
-    
-      da.eval = (f, opt) => da.eval.initial.push([f, opt]);
-      da.eval.initial = [];
-    
-      function initModuleLoader() {
-        for(var i = 0; i < da.eval.initial.length; ++i) {
-          da_eval.apply(null, da.eval.initial[i]);
+        da.handle('da:status', () => ({pid: da.pid, time: Date.now()}), {public: true});
+        if(!isBrowser()) {
+          da.handle('da:children', da.children);
         }
-        da.eval = da_eval;
       }
-    
 ## Utilities
 
-### `isNodeJS`, `isMainThread`
+### `ready(fn)`
+
+      var waiting = [];
+      da.ready = (fn) => {
+        if(waiting) {
+          waiting.push(fn);
+        } else {
+          fn();
+        }
+      };
+    
+### `isNodeJS()`, `isBrowser()`
 
       da.isNodeJs = isNodeJs;
       function isNodeJs() {
         return !!((self.process || {}).versions || {}).node;
       }
-      da.isNodeJs = isNodeJs;
     
       da.isBrowser = isBrowser;
       function isBrowser() {
         return !!(self.window);
-      }
-      da.isMainThread = isMainThread;
-      function isMainThread() {
-        return !isWorker;
-      }
-      da.isWorker = isWorker;
-      function isWorker() {
-        return !!self.postMessage && self.postMessage.length === 1;
       }
     
 ### `da.log(...)` `da.trace(...)`
@@ -533,7 +514,7 @@ Translate JavaScript objects JSON
       function jsonReplacer(o) {
         var jsonifyWhitelist = ['stack', 'name', 'message', 'id', 'class', 'value'];
     
-        if((typeof o !== 'object' && typeof o !== 'function') || 
+        if((typeof o !== 'object' && typeof o !== 'function') ||
             o === null || Array.isArray(o) || o.constructor === Object) {
           return o;
         }
@@ -571,7 +552,7 @@ in if above.
     
       da.nextTick = nextTick;
       function nextTick(f) {
-        setTimeout(f, 0);
+        setTimeout(f, 0); // TODO this is relatively slow, could implement with faster version.
       }
     
 ### `slice(arr, i, j)`
@@ -587,29 +568,14 @@ in if above.
         da.assertEquals(da.slice([1,2,3], 1 , 2).length, 1);
       });
     
-### `nextId()`
-    
-      var prevId = 0;
-      da.nextId = () => ++prevId;
-    
-
 ### `buf2ascii(buf)`, `ascii2buf(str)`
 
     
       da.buf2ascii = (buf) =>
-        Array.from(new Uint8Array(buf))
-        .map(i => String.fromCharCode(i)).join('');
-      da.ascii2buf = (str) => {
-        var result = new Uint8Array(str.length);
-        for(var i = 0; i < str.length; ++i) {
-          result[i] = str.charCodeAt(i);
-        }
-        return result.buffer;
-      };
+        Array.from(new Uint8Array(buf)).map(i => String.fromCharCode(i)).join('');
     
       test('buffer conversion', () => {
         da.assertEquals(da.buf2ascii(Uint8Array.from([104,105]).buffer), 'hi');
-        da.assertEquals(da.buf2ascii(da.ascii2buf('hi')), 'hi');
       });
     
 ### `equals(a,b)`
@@ -673,10 +639,6 @@ TODO handle iterables
         da.assert(!da.equals({a:['1',2],b:3},{b:3,a:[1,2]}));
         da.assertEquals({a:[1,2],b:3},{b:3,a:[1,2]});
       });
-    
-### TODO `parseStack(err)`
-
-TODO should be used for better error reporting during testing, ie. line number of assert error
     
 ## Testing
     
@@ -786,74 +748,75 @@ To get the call stack correct, to be able to report assert position, we throw an
       });
     
 ## Module Setup / Main
+    
       function setupModule() {
+    
+Shims
         if(typeof self === 'undefined') {
           global.self = global;
         }
     
-        if(self.location &&
+        if(!self.URL) {
+          self.URL = self.webkitURL;
+        }
+    
+Make sure are on https in browser,
+otherwise crypto etc. wont work.
+    
+        if(isBrowser() &&
             self.location.protocol === 'http:' &&
-            location.hostname !== 'localhost') {
+            self.location.hostname !== 'localhost') {
           self.location.href = self.location.href.replace(/http/, 'https');
         }
     
+Setup / export module
+    
         da = self.direape || {};
-    
-        installShims();
-    
     
         if(typeof module === 'undefined') {
           self.direape = da;
         } else {
           module.exports = da;
         }
+      }
     
-        nextTick(() =>  {
-          Promise
-            .resolve(initPid())
-            .then(initHandlers)
-            .then(initWorker)
-            .then(initModuleLoader)
-            .then(() => {
-              console.log('DireApe ready, pid:', da.pid);
-              if(self.DIREAPE_RUN_TESTS) {
-                da.runTests();
-              }
+Initialisation, of the different parts of direape
     
-              if(isNodeJs() && require.main === module) {
-                if(process.argv.indexOf('test') !== -1) {
-                  da.runTests()
-                    .then(o => {
-                      if(process.argv.indexOf('server') !== -1) {
-                        da.startServer();
-                      } else {
-                        process.exit(0);
-                      }
-                    }).catch(e => process.exit(-1));
-                }
-              }
-            });
+      Promise
+        .resolve(initPid())
+        .then(initHandlers)
+        .then(initWorker)
+        .then(() => {
+          for(var i = 0; i < waiting.length; ++i) {
+            waiting[i]();
+          }
+          waiting = false;
         });
-      }
     
-      function installShims() {
-        if(!self.URL) {
-          self.URL = self.webkitURL;
+Main entry
+      da.ready(() => {
+        if(self.DIREAPE_RUN_TESTS) {
+          da.runTests();
         }
-      }
+    
+        if(isNodeJs() && require.main === module) {
+          if(process.argv.indexOf('test') !== -1) {
+            da.runTests()
+              .then(o => {
+                if(process.argv.indexOf('server') !== -1) {
+                  da.startServer();
+                } else {
+                  process.exit(0);
+                }
+              }).catch(e => process.exit(-1));
+          }
+        }
+      });
     })();
+    
 ## License
 
 This software is copyrighted solsort.com ApS, and available under GPLv3, as well as proprietary license upon request.
 
 Versions older than 10 years also fall into the public domain.
-
-    
-<img src=https://direape.solsort.com/icon.png width=96 height=96 align=right>
-
-[![website](https://img.shields.io/badge/website-direape.solsort.com-blue.svg)](https://direape.solsort.com/)
-[![github](https://img.shields.io/badge/github-solsort/direape-blue.svg)](https://github.com/solsort/direape)
-[![codeclimate](https://img.shields.io/codeclimate/github/solsort/direape.svg)](https://codeclimate.com/github/solsort/direape)
-[![travis](https://img.shields.io/travis/solsort/direape.svg)](https://travis-ci.org/solsort/direape)
-[![npm](https://img.shields.io/npm/v/direape.svg)](https://www.npmjs.com/package/direape)
 

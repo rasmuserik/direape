@@ -40,7 +40,7 @@ reun.run(`
     <script>DIREAPE_RUN_TESTS = true;</script>
     <script src=direape.js></script>
     <script>
-direape.eval(() => {
+direape.ready(() => {
   app.innerHTML = 'DireApe running!<br>Pid:' + direape.pid;
 })
     </script>
