@@ -12,6 +12,7 @@
 //
 (function() {
   var da; setupModule();
+  da.test = test;
 
   // ## Message Passing
   //
@@ -178,7 +179,7 @@
     }
   }
 
-  test('message passing', () => {
+  da.test('message passing', () => {
     da.handle('da:square', i => i*i);
     return da.call(da.pid, 'da:square', 9)
       .then(i => da.assertEquals(i, 81));
@@ -198,31 +199,31 @@
   if(isBrowser()) {
 
     var children;
-    var direapeSource;
-
     da.spawn = () => new Promise((resolve, reject) => {
+      loadWorkerSource().then(workerSource => {
 
-      var childPid = da.pid + Math.random().toString(36).slice(2,12);
-      var workerSource = `
-        self.direape = {
-          pid: '${childPid}',
-          nid: '${da.pid}'
+        var childPid = da.pid + Math.random().toString(36).slice(2,12);
+        workerSource = `
+          self.direape = {
+            pid: '${childPid}',
+            nid: '${da.pid}'
+          };
+        ` + workerSource;
+
+        var workerSourceUrl = URL.createObjectURL(
+            new Blob([workerSource], {type:'application/javascript'}));
+
+        var child = new self.Worker(workerSourceUrl);
+        console.log(child);
+
+        children.set(childPid, child);
+
+        child.onmessage = (o) => {
+          child.onmessage = (o) => send(o.data);
+          URL.revokeObjectURL(workerSourceUrl);
+          resolve(childPid);
         };
-      ` + direapeSource;
-
-      var workerSourceUrl = URL.createObjectURL(
-          new Blob([workerSource], {type:'application/javascript'}));
-
-      var child = new self.Worker(workerSourceUrl);
-      console.log(child);
-
-      children.set(childPid, child);
-
-      child.onmessage = (o) => {
-        child.onmessage = (o) => send(o.data);
-        URL.revokeObjectURL(workerSourceUrl);
-        resolve(childPid);
-      };
+      });
     });
 
     // ### `children()`
@@ -263,13 +264,21 @@
     if(isWorker()) {
       self.onmessage = (o) => send(o.data);
       self.postMessage({});
-    } else {
+    } 
+  }
+
+  var workerSourcePromise;
+  function loadWorkerSource() {
+    if(!workerSourcePromise) {
+      var source;
       var reunRequest = da.GET('https://unpkg.com/reun@0.2');
-      return da.GET(isDev() ? './direape.js' : 'https://unpkg.com/direape@0.2')
-        .then(src => direapeSource = src)
+      workerSourcePromise = da.GET(isDev() ? './direape.js' : 'https://unpkg.com/direape@0.2')
+        .then(src => source = src)
         .then(() => reunRequest)
-        .then(reun => direapeSource += reun);
+        .then(reun => source + reun);
+
     }
+    return workerSourcePromise;
   }
 
   function isDev() {
@@ -277,7 +286,7 @@
   }
 
   if(isBrowser()) {
-    test('workers', () => {
+    da.test('workers', () => {
       var childPid;
       return da.spawn()
         .then(pid => childPid = pid)
@@ -410,7 +419,7 @@
 
     // ### `da:list-clients ()`
     //
-    
+
     if(isNodeJs()) {
       da.handle('da:list-clients', () => Array.from(wsClients.keys()), {public: true});
     }
@@ -494,8 +503,8 @@
       }
     });
   }
-  test('GET ok', () => da.GET('https://unpkg.com/direape'));
-  test('GET fail', () => da.GET('https://unpkg.com/direape/notfound')
+  da.test('GET ok', () => da.GET('https://unpkg.com/direape'));
+  da.test('GET fail', () => da.GET('https://unpkg.com/direape/notfound')
       .catch(() => 'error')
       .then(ok => da.assertEquals('error', ok)));
 
@@ -507,7 +516,7 @@
   da.jsonify = o =>
     JSON.parse(JSON.stringify([o], (k,v) => jsonReplacer(v)))[0];
 
-  test('jsonify', () => {
+  da.test('jsonify', () => {
     var e = new Error('argh');
     e.stack = 'hello';
 
@@ -577,7 +586,7 @@
     return Array.prototype.slice.call(a, start, end);
   };
 
-  test('slice', () => {
+  da.test('slice', () => {
     da.assertEquals(da.slice([1,2,3]).length, 3);
     da.assertEquals(da.slice([1,2,3], 1)[1], 3);
     da.assertEquals(da.slice([1,2,3], 1 , 2).length, 1);
@@ -589,7 +598,7 @@
   da.buf2ascii = (buf) =>
     Array.from(new Uint8Array(buf)).map(i => String.fromCharCode(i)).join('');
 
-  test('buffer conversion', () => {
+  da.test('buffer conversion', () => {
     da.assertEquals(da.buf2ascii(Uint8Array.from([104,105]).buffer), 'hi');
   });
 
@@ -649,7 +658,7 @@
     return false;
   };
 
-  test('equals', () => {
+  da.test('equals', () => {
     da.assert(da.equals({a:[1,2],b:3},{b:3,a:[1,2]}));
     da.assert(!da.equals({a:['1',2],b:3},{b:3,a:[1,2]}));
     da.assertEquals({a:[1,2],b:3},{b:3,a:[1,2]});
@@ -677,7 +686,7 @@
   function testSuite(str) {
     currentTestSuite = str;
   }
-  
+
   // ### `test(name, fn)`
 
   var tests;
@@ -767,7 +776,7 @@
     throw err;
   }
 
-  test('assert',()=>{
+  da.test('assert',()=>{
     try {
       da.assertEquals(1,2);
     } catch(e) {
