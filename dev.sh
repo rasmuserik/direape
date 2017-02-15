@@ -1,9 +1,9 @@
 if [ ! -e node_modules/.bin/live-server ]; then npm install --save-dev live-server eslint uglify-js-harmony; fi
 
-./node_modules/.bin/live-server --no-browser &
+./node_modules/.bin/live-server --no-browser --ignore node_modules &
 echo $! > .pid-live-server
 
-(sleep 0.5; touch direape.js) &
+(sleep 3; touch direape.js) &
 while inotifywait -e modify,close_write,move_self -q *.js
 do 
   kill `cat .pid`
