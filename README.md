@@ -486,6 +486,9 @@ TODO: make it work with unpkg(cross-origin) in webworkers (through making reques
         da.ajax = (url, opt) =>
           new Promise((resolve, reject) => {
             opt = opt || {};
+            if(opt.json) {
+              opt.data = JSON.stringify(opt.data);
+            }
             opt.method = opt.method || (opt.data ? 'POST' : 'GET');
             var xhr = new XMLHttpRequest();
             xhr.open(opt.method, url);
@@ -499,7 +502,7 @@ TODO: make it work with unpkg(cross-origin) in webworkers (through making reques
                 }
               }
             };
-            xhr.send(opt.data ? JSON.stringify(opt.data) : undefined);
+            xhr.send(opt.data ? opt.data : undefined);
           });
         da.GET = da.ajax;
     
