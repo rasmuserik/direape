@@ -453,7 +453,7 @@
     if(waiting) {
       waiting.push(fn);
     } else {
-      fn();
+      da.nextTick(fn);
     }
   };
 
