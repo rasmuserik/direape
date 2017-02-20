@@ -264,7 +264,7 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
         if(isWorker()) {
           self.onmessage = (o) => send(o.data);
           self.postMessage({});
-        } 
+        }
       }
     
       var workerSourcePromise;
@@ -453,7 +453,7 @@ global is called `global` in nodejs, `window` in browser, and `self` in webworke
         if(waiting) {
           waiting.push(fn);
         } else {
-          fn();
+          da.nextTick(fn);
         }
       };
     
@@ -482,18 +482,29 @@ global is called `global` in nodejs, `window` in browser, and `self` in webworke
 TODO: make it work with unpkg(cross-origin) in webworkers (through making request in main thread).
     
       if(self.XMLHttpRequest) {
-        da.GET = (url) => new Promise((resolve, reject) => {
-          var xhr = new XMLHttpRequest();
-          xhr.open('GET', url);
-          xhr.onreadystatechange = () =>
-            xhr.readyState === 4 &&
-            ( ( xhr.status === 200
-                && typeof xhr.responseText === 'string')
-              ? resolve(xhr.responseText)
-              : reject(xhr));
-          xhr.send();
-        });
+    
+        da.ajax = (url, opt) =>
+          new Promise((resolve, reject) => {
+            opt = opt || {};
+            opt.method = opt.method || (opt.data ? 'POST' : 'GET');
+            var xhr = new XMLHttpRequest();
+            xhr.open(opt.method, url);
+            xhr.onreadystatechange = function() {
+              if(xhr.readyState === 4) {
+                if(xhr.status === 200
+                    && typeof xhr.responseText === 'string') {
+                  resolve(xhr.responseText);
+                } else {
+                  reject(xhr);
+                }
+              }
+            };
+            xhr.send(opt.data ? JSON.stringify(opt.data) : undefined);
+          });
+        da.GET = da.ajax;
+    
       } else {
+    
         da.GET = (url) => new Promise((resolve, reject) => {
           if(url[0] === '.') {
             resolve(require('fs').readFileSync(url));
