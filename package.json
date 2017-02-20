@@ -1,6 +1,6 @@
 {
   "name": "direape",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Distributed Reactive App Environment",
   "main": "direape.js",
   "scripts": {
