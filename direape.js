@@ -282,7 +282,7 @@
   }
 
   function isDev() {
-    return isNodeJs() ? process.env.DIREAPE_DEV : da.global.DIREAPE_DEV;
+    return isNodeJs() ? process.env.DIREAPE_DEV : self.DIREAPE_DEV;
   }
 
   if(isBrowser()) {
@@ -440,12 +440,6 @@
   }
   // ## Utilities
   //
-  // ### global
-  //
-  // global is called `global` in nodejs, `window` in browser, and `self` in webworker (and browser)...
-
-  da.global = self;
-
   // ### `ready(fn)`
   //
   var waiting = [];
