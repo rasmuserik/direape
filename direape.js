@@ -482,7 +482,7 @@
         xhr.open(opt.method, url);
         xhr.onreadystatechange = function() {
           if(xhr.readyState === 4) {
-            if(xhr.status === 200
+            if((200 <= xhr.status && xhr.status < 300)
                 && typeof xhr.responseText === 'string') {
               resolve(xhr.responseText);
             } else {
