@@ -23,9 +23,7 @@ Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/
 ### `handle(name, fn, opt)`
 
       da._handlers = da._handlers || new Map();
-      console.log('handlers', da._handlers);
       da.handle = (name, fn, opt) => {
-        console.log('da.handle', name);
         if(!fn) {
           da._handlers.delete(name);
         }
@@ -146,7 +144,6 @@ but later on, it will come in handy.
       }
     
       function processMessage(msg) {
-        console.log('processMessage', msg);
         if(msg.dstPid === da.pid) {
           processLocalMessage(msg);
         } else {
@@ -218,7 +215,6 @@ but later on, it will come in handy.
                 new Blob([workerSource], {type:'application/javascript'}));
     
             var child = new self.Worker(workerSourceUrl);
-            console.log(child);
     
             da._children.set(childPid, child);
     
