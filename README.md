@@ -6,65 +6,40 @@
 [![travis](https://img.shields.io/travis/solsort/direape.svg)](https://travis-ci.org/solsort/direape)
 [![npm](https://img.shields.io/npm/v/direape.svg)](https://www.npmjs.com/package/direape)
 
-# DireApe - Distributed Reactive App Environment
+# DireApe - Distributed App Environment
 
-Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/gh/solsort/direape).
+Direape supplies:
 
+- message passing, locally and across network
+- creation/destruction of worker threads
+- simple nodejs message relay server
+- unit testing library
+- utility library
+
+Read latest documentation on [AppEdit](https://appedit.solsort.com/?page=read&github=solsort/direape).
+
+It is fully self-contained and is the foundation for [REUN](https://appedit.solsort.com/?page=read&github=solsort/reun).
+    
     (function() {
       var da; setupModule();
-      da.test = test;
     
       da.info = {
+        name: 'direape',
+        keywords: ['message passing', 'unit testing'],
+        platforms: ['nodejs', 'webworker', 'browser'],
         github: 'solsort/direape'
       };
     
 ## Message Passing
 
-### `handle(name, fn, opt)`
-
-      da._handlers = da._handlers || new Map();
-      da.handle = (name, fn, opt) => {
-        if(!fn) {
-          da._handlers.delete(name);
-        }
-        da._handlers.set(name, Object.assign(opt || {}, {fn:fn}));
-      };
-
-### `emit(pid, name, args...)`
-
-TODO: test
-    
-      da.emit = function(pid, name) {
-        send({
-          dstPid: pid,
-          dstName: name,
-          data: da.slice(arguments, 2)
-        });
-      };
-    
-### `call(pid, name, args...)`
-
-      da.call = function(pid, name) {
-        return new Promise((resolve, reject) =>
-            send({
-              dstPid: pid,
-              dstName: name,
-              srcPid: da.pid,
-              srcName: makeCallbackHandler(resolve, reject),
-              data: da.slice(arguments, 2)
-            }));
-      };
-    
 ### `pid`, `nid`
 
-`pid` is the process id and `nid` is the node id.
+`direape.pid` is id of the current process. `direape.nid` is the id of the main process on this computer/node.
 
-These are set by parent thread, so if they are unset, it means that we are the node main thread.
+In worker processes, these are set by the parent thread.
 
-The pid is the hash of the public key for the node.
-
-We do not use the keys for identity yet,
-but later on, it will come in handy.
+Some of the code below is in progress. 
+Cryptographic ids will be used when it becomes more distributed.
     
       function initPid() {
         if(!da.pid) {
@@ -74,7 +49,7 @@ but later on, it will come in handy.
               .createHash('sha256')
               .update(da._publicKey)
               .digest('base64');
-        } else if(typeof self.crypto.subtle === 'undefined') {
+          } else if(typeof self.crypto.subtle === 'undefined') {
             return Promise.resolve('no-crypto-local-only')
               .then(base64 => da.pid = da.nid = base64)
               .catch(e => {
@@ -84,7 +59,7 @@ but later on, it will come in handy.
                   + e.toString();
                 throw e;
               });
-        } else {
+          } else {
             return da.pid || Promise.resolve()
               .then(() => self.crypto.subtle ||
                   (self.crypto.subtle = self.crypto.webkitSubtle))
@@ -106,6 +81,52 @@ but later on, it will come in handy.
           }
         }
       }
+    
+### `handle(name, fn, opt)`
+
+Register a new message handler in the current thread, 
+given the name of the mailbox. 
+The handler can be called across the network if `opt` is `{"public": true}`.
+
+The handler function `fn`, gets called when a message arrives, 
+with the parameters passed in the message.
+    
+      da._handlers = da._handlers || new Map();
+      da.handle = (name, fn, opt) => {
+        if(!fn) {
+          da._handlers.delete(name);
+        }
+        da._handlers.set(name, Object.assign(opt || {}, {fn:fn}));
+      };
+    
+### `call(pid, name, args...)`
+
+Call a (remote) function, given the process id, and the handler name. 
+Will return a promise of a result (that will time out if no result arrive.
+
+      da.call = function(pid, name) {
+        return new Promise((resolve, reject) =>
+            send({
+              dstPid: pid,
+              dstName: name,
+              srcPid: da.pid,
+              srcName: makeCallbackHandler(resolve, reject),
+              data: da.slice(arguments, 2)
+            }));
+      };
+    
+### `emit(pid, name, args...)`
+
+Emit a message to a remote handler, - similar to `call`, 
+except that it will not send a result back.
+    
+      da.emit = function(pid, name) {
+        send({
+          dstPid: pid,
+          dstName: name,
+          data: da.slice(arguments, 2)
+        });
+      };
     
 ### Implementation details
 
@@ -199,14 +220,15 @@ but later on, it will come in handy.
     
 ## Workers
 
-### `isWorker()`
-    
-      da.isWorker = isWorker;
-      function isWorker() {
-        return !!self.postMessage && self.postMessage.length === 1;
-      }
-    
+Only available in browser main thread.
+
 ### `spawn()`
+
+Create a new worker thread.
+
+Returns a promise of the process id of the new thread. 
+Code can then be loaded using [reun](https://appedit.solsort.com/?page=read&github=reun),
+which exposes `reun:require` and `reun:eval`.
     
       if(isBrowser()) {
         da._children = da._children || new Map();
@@ -236,19 +258,38 @@ but later on, it will come in handy.
             };
           });
         });
+      }
+    
+### `isWorker()`
+
+Check whether the current process is a worker thread.
+    
+      da.isWorker = isWorker;
+      function isWorker() {
+        return !!self.postMessage && self.postMessage.length === 1;
+      }
     
 ### `children()`
+
+Get the list of running worker processes.
     
+      if(isBrowser()) {
         da.children = () => da._children.keys();
+      }
     
 ### `kill(child-id)`
+
+Kill a worker process.
     
+      if(isBrowser()) {
         da.kill = (pid) => {
           da._children.get(pid).terminate();
           da._children.delete(pid);
         };
       }
     
+### Implementation details
+
 Send the message to ther processes. Only called if it shouldn't be handled by the process itself;
     
       function relay(msg) {
@@ -301,6 +342,9 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
       }
     
 ## Network
+
+Message passing between servers, - is implemented,
+and should work, but not used for production yet.
 
 ### `online([boolean/url])`
 
@@ -419,21 +463,31 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
       }
     
 ## Built-in Handlers
+
+These are the event handlers. that are exposed
     
       function initHandlers() {
     
 ### `da:list-clients ()`
 
+List clients connected to the NodeJS message relay server.
     
         if(isNodeJs()) {
           da.handle('da:list-clients', () => Array.from(wsClients.keys()), {public: true});
         }
     
 ### `da:get (url)`
+
+Get the content of a URL. This is needed by the module loader:
+WebWorkers may not be able to load the modules due to the web security model,
+but they can they are able to request them through the main thread.
     
         da.handle('da:GET', da.GET);
     
 ### `da:status ()`
+
+Get a status with a timestamp. 
+Can be used to ping for latency and checking whether a thread is alive.
     
         da.handle('da:status', () => ({pid: da.pid, time: Date.now()}), {public: true});
     
@@ -445,7 +499,12 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
       }
 ## Utilities
 
+Various utilities needed by DireApe, and made available 
+as other libraries/code are also using them
+
 ### `ready(fn)`
+
+Called when direape is loaded, and has a valid `pid`.
 
       da._waiting = da._waiting || [];
       da.ready = (fn) => {
@@ -457,6 +516,8 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
       };
     
 ### `isNodeJS()`, `isBrowser()`
+
+Determine which environment we are in, see also `isWorker`, under Workers above.
 
       da.isNodeJs = isNodeJs;
       function isNodeJs() {
@@ -470,15 +531,23 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
     
 ### `da.log(...)` `da.trace(...)`
 
+Simple logging, used for debug.
+
       da.log = function(msg, o) {
         console.log.apply(console, arguments);
         return o;
       };
       da.trace = da.log;
 
-### `GET(url)`
+### `ajax` `GET(url)`
 
-TODO: make it work with unpkg(cross-origin) in webworkers (through making request in main thread).
+We need to export http-get from the main thread,
+to be able to fetch modules with webworkers.
+
+May as well make a generic `ajax` function,
+which is not much extra code, and is needed by other code.
+
+(`fetch` is not universally supported yet )
     
       if(self.XMLHttpRequest) {
     
@@ -523,8 +592,10 @@ TODO: make it work with unpkg(cross-origin) in webworkers (through making reques
     
 ### `jsonify(obj)`
 
-Translate JavaScript objects JSON
+Translate many general JavaScript objects into `JSON.stringify`-able objects. 
 
+Used for preprocesing data that will be passed as messages, 
+if they may contain data of classes that would mess up the serialisation.
     
       da.jsonify = o =>
         JSON.parse(JSON.stringify([o], (k,v) => jsonReplacer(v)))[0];
@@ -593,7 +664,6 @@ in if above.
       }
     
 ### `slice(arr, i, j)`
-
     
       da.slice = (a, start, end) => {
         return Array.prototype.slice.call(a, start, end);
@@ -605,8 +675,9 @@ in if above.
         da.assertEquals(da.slice([1,2,3], 1 , 2).length, 1);
       });
     
-### `buf2ascii(buf)`, `ascii2buf(str)`
+### `buf2ascii(buf)`, `ascii2buf(str)` 
 
+Convert buffers to/from strings using latin1 encoding with one byte per char.
     
       da.buf2ascii = (buf) =>
         Array.from(new Uint8Array(buf)).map(i => String.fromCharCode(i)).join('');
@@ -700,6 +771,10 @@ Sets the current test suite name
       }
     
 ### `test(name, fn)`
+
+Add a test case.
+For asynchrounous tests, let the function return a promise.
+Notice that tests may run in parallel.
     
       da.test = test;
       function test(name, f) {
@@ -713,7 +788,9 @@ Sets the current test suite name
         da._tests.push(f);
       }
     
-### `runTests(modules)`
+### `runTests(testSuites)`
+
+Execute the tests given a list of test suites.
     
       da.runTests = (modules) => {
         var ts = da._tests;
@@ -828,6 +905,8 @@ Setup / export module
         } else {
           module.exports = da;
         }
+    
+        da.test = test;
     
 Define name of testsuite
     
