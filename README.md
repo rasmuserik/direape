@@ -14,17 +14,20 @@ Read up to date documentation on [AppEdit](https://appedit.solsort.com/?Read/js/
       var da; setupModule();
       da.test = test;
     
+      da.info = {
+        github: 'solsort/direape'
+      };
+    
 ## Message Passing
 
 ### `handle(name, fn, opt)`
 
-      var handlers;
-    
+      da._handlers = da._handlers || new Map();
       da.handle = (name, fn, opt) => {
         if(!fn) {
-          handlers.delete(name);
+          da._handlers.delete(name);
         }
-        handlers.set(name, Object.assign(opt || {}, {fn:fn}));
+        da._handlers.set(name, Object.assign(opt || {}, {fn:fn}));
       };
 
 ### `emit(pid, name, args...)`
@@ -63,14 +66,13 @@ The pid is the hash of the public key for the node.
 We do not use the keys for identity yet,
 but later on, it will come in handy.
     
-      var publicKey;
       function initPid() {
         if(!da.pid) {
           if(!self.crypto && isNodeJs()) {
-            publicKey = Math.random().toString(); // TODO
+            da._publicKey = Math.random().toString(); // TODO
             da.pid = require('crypto')
               .createHash('sha256')
-              .update(publicKey)
+              .update(da._publicKey)
               .digest('base64');
           } else {
             return da.pid || Promise.resolve()
@@ -80,7 +82,7 @@ but later on, it will come in handy.
                     {name: 'ECDSA', namedCurve: 'P-521'},
                     true, ['sign', 'verify']))
               .then(key => self.crypto.subtle.exportKey('spki', key.publicKey))
-              .then(spki => publicKey = spki)
+              .then(spki => da._publicKey = spki)
               .then(buf => self.crypto.subtle.digest('SHA-256', buf))
               .then(buf => btoa(da.buf2ascii(buf)))
               .then(base64 => da.pid = da.nid = base64)
@@ -96,10 +98,9 @@ but later on, it will come in handy.
     
 ### Implementation details
 
-      var messageQueue = [];
+      da._messageQueue = [];
       var postmanScheduled = false;
       var callTimeout = 10000;
-      handlers = new Map();
     
       function makeCallbackHandler(resolve, reject) {
         var name = 'callback' + Math.random().toString().slice(2);
@@ -122,7 +123,7 @@ but later on, it will come in handy.
       }
     
       function send(msg) {
-        messageQueue.push(msg);
+        da._messageQueue.push(msg);
         schedulePostman();
       }
     
@@ -135,8 +136,8 @@ but later on, it will come in handy.
     
       function postman() {
         postmanScheduled = false;
-        var messages = messageQueue;
-        messageQueue = [];
+        var messages = da._messageQueue;
+        da._messageQueue = [];
         for(var i = 0; i < messages.length; ++i) {
           processMessage(messages[i]);
         }
@@ -152,7 +153,7 @@ but later on, it will come in handy.
     
       function processLocalMessage(msg) {
         var result;
-        var handler = handlers.get(msg.dstName) || {};
+        var handler = da._handlers.get(msg.dstName) || {};
     
         if(msg.external && ! handler.public) {
           return sendReply(msg, [null, 'no such public function']);
@@ -197,8 +198,8 @@ but later on, it will come in handy.
 ### `spawn()`
     
       if(isBrowser()) {
+        da._children = da._children || new Map();
     
-        var children;
         da.spawn = () => new Promise((resolve, reject) => {
           loadWorkerSource().then(workerSource => {
     
@@ -216,7 +217,7 @@ but later on, it will come in handy.
             var child = new self.Worker(workerSourceUrl);
             console.log(child);
     
-            children.set(childPid, child);
+            da._children.set(childPid, child);
     
             child.onmessage = (o) => {
               child.onmessage = (o) => send(o.data);
@@ -228,19 +229,14 @@ but later on, it will come in handy.
     
 ### `children()`
     
-        da.children = () => children.keys();
+        da.children = () => da._children.keys();
     
 ### `kill(child-id)`
     
         da.kill = (pid) => {
-          children.get(pid).terminate();
-          children.delete(pid);
+          da._children.get(pid).terminate();
+          da._children.delete(pid);
         };
-    
-### Implementation details
-    
-        children = new Map();
-    
       }
     
 Send the message to ther processes. Only called if it shouldn't be handled by the process itself;
@@ -249,7 +245,7 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
         if(isWorker()) {
           self.postMessage(msg);
         } else if(isBrowser()) {
-          var child = children.get(msg.dstPid);
+          var child = da._children.get(msg.dstPid);
           if(child) {
             child.postMessage(msg);
           } else {
@@ -267,22 +263,21 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
         }
       }
     
-      var workerSourcePromise;
       function loadWorkerSource() {
-        if(!workerSourcePromise) {
+        if(!da._workerSourcePromise) {
           var source;
           var reunRequest = da.GET('https://unpkg.com/reun@0.2');
-          workerSourcePromise = da.GET(isDev() ? './direape.js' : 'https://unpkg.com/direape@0.2')
+          da._workerSourcePromise = da.GET(isDev() ? './direape.js' : 'https://unpkg.com/direape@0.2')
             .then(src => source = src)
             .then(() => reunRequest)
             .then(reun => source + reun);
     
         }
-        return workerSourcePromise;
+        return da._workerSourcePromise;
       }
     
       function isDev() {
-        return isNodeJs() ? process.env.DIREAPE_DEV : da.global.DIREAPE_DEV;
+        return isNodeJs() ? process.env.DIREAPE_DEV : self.DIREAPE_DEV;
       }
     
       if(isBrowser()) {
@@ -319,7 +314,7 @@ TODO: automatic reconnect
             return new Promise((resolve, reject) => {
               websocket = new WebSocket(url);
               websocket.onopen = () => {
-                websocket.send(JSON.stringify({direapeConnect: da.buf2ascii(publicKey)}));
+                websocket.send(JSON.stringify({direapeConnect: da.buf2ascii(da._publicKey)}));
                 resolve(true);
               };
               websocket.onerror = (e) => {
@@ -440,18 +435,12 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
       }
 ## Utilities
 
-### global
-
-global is called `global` in nodejs, `window` in browser, and `self` in webworker (and browser)...
-    
-      da.global = self;
-    
 ### `ready(fn)`
 
-      var waiting = [];
+      da._waiting = da._waiting || [];
       da.ready = (fn) => {
-        if(waiting) {
-          waiting.push(fn);
+        if(da._waiting) {
+          da._waiting.push(fn);
         } else {
           da.nextTick(fn);
         }
@@ -695,32 +684,29 @@ TODO handle iterables
 
 Sets the current test suite name
     
-      var currentTestSuite;
       da.testSuite = testSuite;
       function testSuite(str) {
-        currentTestSuite = str;
+        da._currentTestSuite = str;
       }
     
 ### `test(name, fn)`
     
-      var tests;
       da.test = test;
       function test(name, f) {
-        if(currentTestSuite) {
-          name = currentTestSuite + ':' + name;
+        if(da._currentTestSuite) {
+          name = da._currentTestSuite + ':' + name;
         }
         f.testName = name;
-        if(!tests) {
-          tests = [];
+        if(!da._tests) {
+          da._tests = [];
         }
-        tests.push(f);
+        da._tests.push(f);
       }
     
 ### `runTests(modules)`
     
-      var errors;
       da.runTests = (modules) => {
-        var ts = tests;
+        var ts = da._tests;
         if(modules) {
           if(!Array.isArray(modules)) {
             modules = [modules];
@@ -803,11 +789,6 @@ To get the call stack correct, to be able to report assert position, we throw an
     
       function setupModule() {
     
-Define name of testsuite
-    
-        testSuite('direape');
-    
-    
 Shims
     
         if(typeof self === 'undefined') {
@@ -836,6 +817,10 @@ Setup / export module
         } else {
           module.exports = da;
         }
+    
+Define name of testsuite
+    
+        testSuite('direape');
       }
     
 Initialisation, of the different parts of direape
@@ -845,10 +830,10 @@ Initialisation, of the different parts of direape
         .then(initHandlers)
         .then(initWorker)
         .then(() => {
-          for(var i = 0; i < waiting.length; ++i) {
-            waiting[i]();
+          for(var i = 0; i < da._waiting.length; ++i) {
+            da._waiting[i]();
           }
-          waiting = false;
+          da._waiting = false;
         });
     
 Main entry
