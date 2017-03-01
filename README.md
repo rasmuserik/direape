@@ -74,7 +74,17 @@ but later on, it will come in handy.
               .createHash('sha256')
               .update(da._publicKey)
               .digest('base64');
-          } else {
+        } else if(typeof self.crypto.subtle === 'undefined') {
+            return Promise.resolve('no-crypto-local-only')
+              .then(base64 => da.pid = da.nid = base64)
+              .catch(e => {
+                document.body.innerHTML = `
+                  This app requires a browser that supports web cryptography.<br>
+                  This has been tested to work recent Chrome and Firefox. <br>`
+                  + e.toString();
+                throw e;
+              });
+        } else {
             return da.pid || Promise.resolve()
               .then(() => self.crypto.subtle ||
                   (self.crypto.subtle = self.crypto.webkitSubtle))
@@ -89,7 +99,8 @@ but later on, it will come in handy.
               .catch(e => {
                 document.body.innerHTML = `
                   This app requires a browser that supports web cryptography.<br>
-                  This has been tested to work recent Chrome and Firefox.`;
+                  This has been tested to work recent Chrome and Firefox. <br>`
+                  + e.toString();
                 throw e;
               });
           }
@@ -803,7 +814,8 @@ otherwise crypto etc. wont work.
     
         if(isBrowser() &&
             self.location.protocol === 'http:' &&
-            self.location.hostname !== 'localhost') {
+            self.location.hostname !== 'localhost' &&
+            !self.location.hostname.startsWith('192.168.')) {
           self.location.href = self.location.href.replace(/http/, 'https');
         }
     
