@@ -49,16 +49,6 @@ Cryptographic ids will be used when it becomes more distributed.
               .createHash('sha256')
               .update(da._publicKey)
               .digest('base64');
-          } else if(typeof self.crypto.subtle === 'undefined') {
-            return Promise.resolve('no-crypto-local-only')
-              .then(base64 => da.pid = da.nid = base64)
-              .catch(e => {
-                document.body.innerHTML = `
-                  This app requires a browser that supports web cryptography.<br>
-                  This has been tested to work recent Chrome and Firefox. <br>`
-                  + e.toString();
-                throw e;
-              });
           } else {
             return da.pid || Promise.resolve()
               .then(() => self.crypto.subtle ||
@@ -72,11 +62,7 @@ Cryptographic ids will be used when it becomes more distributed.
               .then(buf => btoa(da.buf2ascii(buf)))
               .then(base64 => da.pid = da.nid = base64)
               .catch(e => {
-                document.body.innerHTML = `
-                  This app requires a browser that supports web cryptography.<br>
-                  This has been tested to work recent Chrome and Firefox. <br>`
-                  + e.toString();
-                throw e;
+                da.pid = da.nid = 'local';
               });
           }
         }
