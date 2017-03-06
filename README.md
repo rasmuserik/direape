@@ -47,7 +47,7 @@ Cryptographic ids will be used when it becomes more distributed.
             da._publicKey = Math.random().toString(); // TODO
             da.pid = require('crypto')
               .createHash('sha256')
-              .update(da._publicKey)
+              .update(da._publicKey, 'binary')
               .digest('base64');
           } else {
             return da.pid || Promise.resolve()
@@ -407,7 +407,7 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
       if(isNodeJs()) {
         da.startServer = () => {
           var app = require('express')();
-          app.use(require('express').static('.'));
+          app.use(require('express').static(__dirname));
     
           var server = require('http').createServer(app);
     
@@ -426,7 +426,7 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
                 }
                 nid = require('crypto')
                   .createHash('sha256')
-                  .update(msg.direapeConnect)
+                  .update(msg.direapeConnect, 'binary')
                   .digest('base64');
                 wsClients.set(nid, ws);
               } else {
@@ -930,6 +930,10 @@ Main entry
                   process.exit(0);
                 }
               }).catch(e => process.exit(-1));
+          } else {
+            if(process.argv.indexOf('server') !== -1) {
+              da.startServer();
+            }
           }
         }
       });
