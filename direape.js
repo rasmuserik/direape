@@ -930,6 +930,10 @@
               process.exit(0);
             }
           }).catch(e => process.exit(-1));
+      } else {
+        if(process.argv.indexOf('server') !== -1) {
+          da.startServer();
+        }
       }
     }
   });
