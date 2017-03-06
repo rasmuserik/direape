@@ -47,7 +47,7 @@ Cryptographic ids will be used when it becomes more distributed.
             da._publicKey = Math.random().toString(); // TODO
             da.pid = require('crypto')
               .createHash('sha256')
-              .update(da._publicKey, 'binary')
+              .update(da._publicKey, 'latin1')
               .digest('base64');
           } else {
             return da.pid || Promise.resolve()
@@ -426,7 +426,7 @@ Send the message to ther processes. Only called if it shouldn't be handled by th
                 }
                 nid = require('crypto')
                   .createHash('sha256')
-                  .update(msg.direapeConnect, 'binary')
+                  .update(msg.direapeConnect, 'latin1')
                   .digest('base64');
                 wsClients.set(nid, ws);
               } else {
