@@ -389,7 +389,7 @@
 
   function relayNetwork(msg) {
     if(isNodeJs()) {
-      var dst = wsClients.get(msg.dstPid.slice(0,44));
+      var dst = wsClients.get((msg.dstPid || '').slice(0,44));
       console.log('relay', msg, wsClients.keys(), !!dst);
       if(dst) {
         dst.send(JSON.stringify(msg));
