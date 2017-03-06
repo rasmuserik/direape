@@ -407,7 +407,7 @@
   if(isNodeJs()) {
     da.startServer = () => {
       var app = require('express')();
-      app.use(require('express').static('.'));
+      app.use(require('express').static(__dirname));
 
       var server = require('http').createServer(app);
 
